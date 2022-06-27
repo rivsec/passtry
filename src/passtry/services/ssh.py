@@ -2,17 +2,14 @@ import paramiko
 
 from passtry import (
     logs,
-    protocols,
+    services,
 )
 
 
-__all__ = ('SSH',)
-
-
-class SSH(protocols.Protocol):
+class SSH(services.Service):
 
     port = 22
-    protocol = 'ssh'
+    service = 'ssh'
 
     @classmethod
     def map_kwargs(cls, task):
