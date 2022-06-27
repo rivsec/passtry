@@ -1,0 +1,8 @@
+version: '3.8'
+services:
+  debian-latest-openssh:
+    build:
+      context: .
+      dockerfile: ./dockers/debian-latest-openssh.docker
+    ports:
+      - "2222:22"
