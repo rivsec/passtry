@@ -57,6 +57,9 @@ class Job:
             uri_ports = [None]
         return self.normalize(uri_services, uri_usernames, uri_passwords, uri_targets, uri_ports)
 
+    def consume(self, tasks):
+        self.tasks = tasks
+
     def start(self):
         with concurrent.futures.ThreadPoolExecutor() as executor:
             futures = dict()
@@ -78,4 +81,3 @@ class Job:
                     raise exc
                 else:
                     logs.debug(f'Task {fid} completed')
-        return self.results
