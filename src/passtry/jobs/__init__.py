@@ -30,32 +30,38 @@ class Job:
         }
 
     def normalize(self, *iterables):
-        return [params for params in itertools.product(*iterables)]
+        iters = [[None] if params is None else params for params in iterables]
+        return [list(params) for params in itertools.product(*iters)]
+
+    def merge(self, primary, secondary):
+        mapping = primary[0]
+        for ele in secondary:
+            for idx, _ in enumerate(ele):
+                if mapping[idx]:
+                    ele[idx] = mapping[idx]
 
     def prettify(self, task):
         return '{service}://{username}:{password}@{host}:{port}'.format(**self.task_to_dict(task))
 
-    def split_part(self, part):
-        sliced = ' '.join(SPLIT_REGEX.split(part)[1::2])
-        return shlex.split(sliced)
+    def cleanup(self, param):
+        if param is None or param == '':
+            return
+        return shlex.split(' '.join(SPLIT_REGEX.split(param)[1::2]))
 
     def split(self, uri):
         parsed = parse.urlparse(uri)
-        uri_services = self.split_part(parsed.scheme)
+        uri_services = self.cleanup(parsed.scheme)
         invalid = [srv for srv in uri_services if srv not in services.Service.registry]
         if any(invalid):
             raise Exception('Invalid service')  # TODO: Custom exception
-        uri_usernames = self.split_part(parsed.username) if parsed.username else [None]
-        uri_passwords = self.split_part(parsed.password) if parsed.password else [None]
-        uri_targets = self.split_part(parsed.hostname)
-        if parsed.port:
-            if len(uri_services) > 1:
-                raise Exception('Port numbers cannot be specified when multiple services are tested within a single URI')  # TODO: Custom exception
-            else:
-                uri_ports = (parsed.port,)
+        uri_usernames = self.cleanup(parsed.username)
+        uri_passwords = self.cleanup(parsed.password)
+        uri_targets = self.cleanup(parsed.hostname)
+        if parsed.port and len(uri_services) > 1:
+            raise Exception('Port numbers cannot be specified when multiple services are tested within a single URI')  # TODO: Custom exception
         else:
-            uri_ports = [None]
-        return self.normalize(uri_services, uri_usernames, uri_passwords, uri_targets, uri_ports)
+            uri_ports = [parsed.port] if parsed.port else None
+        return [uri_services, uri_usernames, uri_passwords, uri_targets, uri_ports]
 
     def consume(self, tasks):
         self.tasks = tasks
