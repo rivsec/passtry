@@ -12,6 +12,13 @@ from passtry import (
 
 
 SPLIT_REGEX = re.compile(r"""((?:[^+"']|"[^"]*"|'[^']*')+)""")
+TASK_STRUCT = {
+    0: 'service',
+    1: 'username',
+    2: 'password',
+    3: 'host',
+    4: 'port',
+}
 
 
 class Job:
@@ -21,13 +28,7 @@ class Job:
         self.tasks = list()
 
     def task_to_dict(self, task):
-        return {
-            'service': task[0],
-            'username': task[1],
-            'password': task[2],
-            'host': task[3],
-            'port': task[4],
-        }
+        return {TASK_STRUCT[idx]: tsk for idx, tsk in enumerate(task)}
 
     def normalize(self, *iterables):
         iters = [[None] if params is None else params for params in iterables]
@@ -75,15 +76,17 @@ class Job:
                     cls = services.Service.registry[task[0]]
                 except KeyError:
                     raise Exception(f'Unknown service `{task[0]}`')  # TODO: Custom configuration/arguments exception
-                futures = {executor.submit(cls.execute, fid, task): fid}
+                futures[executor.submit(cls.execute, fid, task)] = fid
             for future in concurrent.futures.as_completed(futures):
                 fid = futures[future]
                 try:
                     results = future.result()
-                    self.results.append(results)
-                    logs.debug(f'Task {fid} added {results} to results')
                 except Exception as exc:
                     logs.error(f'Task {fid} failed with {exc}')
-                    raise exc
                 else:
+                    if results is None:
+                        logs.debug(f'Task {fid} returned empty results')
+                    else:
+                        self.results.append(results)
+                        logs.debug(f'Task {fid} added {results} to results')
                     logs.debug(f'Task {fid} completed')
