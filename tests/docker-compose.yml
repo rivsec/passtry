@@ -5,4 +5,4 @@ services:
       context: .
       dockerfile: ./dockers/debian-latest-openssh.docker
     ports:
-      - "2222:22"
+      - "22:22"

@@ -14,12 +14,13 @@ from passtry import (
 
 SPLIT_REGEX = re.compile(r"""((?:[^+"']|"[^"]*"|'[^']*')+)""")
 TASK_STRUCT = {
-    0: 'service',
-    1: 'username',
-    2: 'password',
-    3: 'host',
-    4: 'port',
+    0: 'services',
+    1: 'usernames',
+    2: 'passwords',
+    3: 'hosts',
+    4: 'ports',
 }
+TASK_STRUCT_BY_NAME = {val: idx for idx, val in enumerate(TASK_STRUCT.values())}
 
 
 class Job:
@@ -47,7 +48,7 @@ class Job:
                     ele[idx] = mapping[idx]
 
     def prettify(self, task):
-        return '{service}://{username}:{password}@{host}:{port}'.format(**self.task_to_dict(task))
+        return '{services}://{usernames}:{passwords}@{hosts}:{ports}'.format(**self.task_to_dict(task))
 
     def cleanup(self, param):
         if param is None or param == '':

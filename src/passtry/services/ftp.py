@@ -15,7 +15,7 @@ class FTP(services.Service):
             'hostname': task[3],
             'username': task[1],
             'password': task[2],
-            'port': task[4],
+            'port': int(task[4]),
         }
 
     @classmethod

@@ -56,3 +56,26 @@ def test_split_args(capsys, ssh_service, data_dir):
     passtry.parse_args(args)
     captured = capsys.readouterr()
     assert captured.out == f'ssh://user:P@55w0rd!@{ssh_host}:{ssh_port}\n'
+
+
+def test_doesnt_fail_without(capsys, ssh_service, data_dir):
+    ssh_host, ssh_port = ssh_service
+    passtry.parse_args([])
+    captured = capsys.readouterr()
+    assert captured.out == 'Missing argument `services`!\n'
+
+
+def test_default_port_from_service_as_arg(capsys, ssh_service, data_dir):
+    ssh_host, ssh_port = ssh_service
+    args = shlex.split(f'-s ssh -U user -P "P@55w0rd!" -t {ssh_host}')
+    passtry.parse_args(args)
+    captured = capsys.readouterr()
+    assert captured.out == f'ssh://user:P@55w0rd!@{ssh_host}:{ssh_port}\n'
+
+
+def test_default_port_from_service_as_uri(capsys, ssh_service, data_dir):
+    ssh_host, ssh_port = ssh_service
+    args = shlex.split(f'-P "P@55w0rd!" -u ssh://user@{ssh_host}')
+    passtry.parse_args(args)
+    captured = capsys.readouterr()
+    assert captured.out == f'ssh://user:P@55w0rd!@{ssh_host}:{ssh_port}\n'

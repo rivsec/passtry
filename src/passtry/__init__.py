@@ -48,23 +48,37 @@ def parse_args(args):
     parsed = parser.parse_args(args)
     if parsed.list_services:
         print('Services: ' + ', '.join((services.Service.registry.keys())))
-    else:
-        job = jobs.Job()
-        services_args = read_args_or_file(parsed, 'services')
-        usernames_args = read_args_or_file(parsed, 'usernames')
-        passwords_args = read_args_or_file(parsed, 'passwords')
-        targets_args = read_args_or_file(parsed, 'targets')
-        ports_args = read_args_or_file(parsed, 'ports')
-        final_args = job.normalize(services_args, usernames_args, passwords_args, targets_args, ports_args)
-        if parsed.uri:
-            normal_uri = job.normalize(*job.split(parsed.uri))
-            job.merge(normal_uri, final_args)
-        job.consume(final_args)
-        job.start()
-        output = '\n'.join(
-            [job.prettify(result) for result in job.results if result]
-        )
-        print(output)
+        return
+    job = jobs.Job()
+    services_args = read_args_or_file(parsed, 'services')
+    usernames_args = read_args_or_file(parsed, 'usernames')
+    passwords_args = read_args_or_file(parsed, 'passwords')
+    targets_args = read_args_or_file(parsed, 'targets')
+    ports_args = read_args_or_file(parsed, 'ports')
+    final_args = job.normalize(services_args, usernames_args, passwords_args, targets_args, ports_args)
+    if parsed.uri:
+        normal_uri = job.normalize(*job.split(parsed.uri))
+        job.merge(normal_uri, final_args)
+
+    first_row = final_args[0]
+    for idx, val in enumerate(first_row):
+        if val is None:
+            missing = jobs.TASK_STRUCT[idx]
+            if missing == 'ports':
+                service = first_row[jobs.TASK_STRUCT_BY_NAME['services']]
+                job.merge(
+                    [[None, None, None, None, services.Service.registry[service].port]],
+                    final_args
+                )
+                continue
+            print(f'Missing argument `{jobs.TASK_STRUCT[idx]}`!')
+            return
+    job.consume(final_args)
+    job.start()
+    output = '\n'.join(
+        [job.prettify(result) for result in job.results if result]
+    )
+    print(output)
 
 
 def main():
