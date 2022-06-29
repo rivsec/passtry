@@ -31,7 +31,7 @@ def test_uri_precedence(capsys, ssh_service):
     args = shlex.split(f'-s http -U user -P P@55w0rd! -p 80+8080 -u ssh://{ssh_host}:{ssh_port}')
     passtry.parse_args(args)
     captured = capsys.readouterr()
-    assert captured.out == f'ssh://user:P@55w0rd!@{ssh_host}:{ssh_port}\nssh://user:P@55w0rd!@127.0.0.1:2222\n'
+    assert captured.out == f'ssh://user:P@55w0rd!@{ssh_host}:{ssh_port}\nssh://user:P@55w0rd!@{ssh_host}:{ssh_port}\n'
 
 
 def test_from_file(capsys, ssh_service, data_dir):

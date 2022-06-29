@@ -1,9 +1,10 @@
-import concurrent.futures
 import itertools
 import re
 import uuid
 from urllib import parse
 import shlex
+import threading
+import queue
 
 from passtry import (
     logs,
@@ -23,9 +24,13 @@ TASK_STRUCT = {
 
 class Job:
 
+    workers_no = 8
+
     def __init__(self):
         self.results = list()
         self.tasks = list()
+        self.workers = list()
+        self.queue = queue.Queue()
 
     def task_to_dict(self, task):
         return {TASK_STRUCT[idx]: tsk for idx, tsk in enumerate(task)}
@@ -67,26 +72,29 @@ class Job:
     def consume(self, tasks):
         self.tasks = tasks
 
+    def worker(self):
+        while True:
+            task = self.queue.get()
+            if task is None:
+                break
+            try:
+                cls = services.Service.registry[task[0]]
+            except KeyError:
+                raise Exception(f'Unknown service `{task[0]}`')  # TODO: Custom configuration/arguments exception
+            try:
+                result = cls.execute(task)
+            except Exception as exc:
+                logs.debug(f'Task failed with {exc}')
+            else:
+                if result:
+                    self.results.append(task)
+            self.queue.task_done()
+
     def start(self):
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            futures = dict()
-            for task in self.tasks:
-                fid = uuid.uuid4()
-                try:
-                    cls = services.Service.registry[task[0]]
-                except KeyError:
-                    raise Exception(f'Unknown service `{task[0]}`')  # TODO: Custom configuration/arguments exception
-                futures[executor.submit(cls.execute, fid, task)] = fid
-            for future in concurrent.futures.as_completed(futures):
-                fid = futures[future]
-                try:
-                    results = future.result()
-                except Exception as exc:
-                    logs.error(f'Task {fid} failed with {exc}')
-                else:
-                    if results is None:
-                        logs.debug(f'Task {fid} returned empty results')
-                    else:
-                        self.results.append(results)
-                        logs.debug(f'Task {fid} added {results} to results')
-                    logs.debug(f'Task {fid} completed')
+        for idx in range(self.workers_no):
+            thread = threading.Thread(name=str(idx), target=self.worker, daemon=True)
+            thread.start()
+            self.workers.append(thread)
+        for task in self.tasks:
+            self.queue.put(task)
+        self.queue.join()

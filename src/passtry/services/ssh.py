@@ -22,34 +22,20 @@ class SSH(services.Service):
         }
 
     @classmethod
-    def execute(cls, fid, task):
-        logs.debug(f'{cls.__name__} is executing {fid}')
+    def execute(cls, task):
+        logs.debug(f'{cls.__name__} is executing {task}')
         kwargs = cls.map_kwargs(task)
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.client.AutoAddPolicy)
+        transport = paramiko.Transport((kwargs['hostname'], kwargs['port']))
         try:
-            client.connect(
-                kwargs.pop('hostname'),
-                allow_agent=False,
-                look_for_keys=False,
-                timeout=cls.timeout,
-                banner_timeout=cls.timeout,
-                auth_timeout=cls.timeout,
-                **kwargs
-            )
-        except paramiko.ssh_exception.AuthenticationException:
-            logs.debug(f'{cls.__name__} authentication failed for {task}')
-            return None
-        except paramiko.ssh_exception.NoValidConnectionsError:
-            logs.debug(f'{cls.__name__} connection failed for {task}')
-            return None
-        except (paramiko.ssh_exception.SSHException, EOFError):
+            transport.start_client()
+        except paramiko.ssh_exception.SSHException as exc:
             logs.debug(f'{cls.__name__} connection failed (timed out?) for {task}')
             return None
-        except Exception as exc:
-            logs.debug(f'{cls.__name__} connection failed with {exc} for {task}')
-            return None
+        try:
+            transport.auth_password(kwargs['username'], kwargs['password'], fallback=False)
+        except paramiko.ssh_exception.AuthenticationException:
+            return False
         else:
-            client.close()
-            logs.debug(f'{cls.__name__} authentication succeeded for {task}')
-            return task
+            return True
+        finally:
+            transport.close()

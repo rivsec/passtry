@@ -12,5 +12,5 @@ class Service:
         cls.registry[cls.service] = cls
 
     @classmethod
-    def execute(cls, fid, task):
+    def execute(cls, task):
         raise NotImplementedError
