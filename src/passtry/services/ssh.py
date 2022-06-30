@@ -1,6 +1,7 @@
 import paramiko
 
 from passtry import (
+    exceptions,
     logs,
     services,
 )
@@ -25,14 +26,14 @@ class SSH(services.Service):
     def execute(cls, task):
         logs.debug(f'{cls.__name__} is executing {task}')
         kwargs = cls.map_kwargs(task)
-        transport = paramiko.Transport((kwargs['hostname'], kwargs['port']))
         try:
+            transport = paramiko.Transport((kwargs['hostname'], kwargs['port']))
             transport.start_client()
         except paramiko.ssh_exception.SSHException as exc:
             logs.debug(f'{cls.__name__} connection failed (timed out?) for {task}')
-            return None
+            raise exceptions.ConnectionFailed
         try:
-            transport.auth_password(kwargs['username'], kwargs['password'], fallback=False)
+            transport.auth_password(kwargs['username'], kwargs['password'])
         except paramiko.ssh_exception.AuthenticationException:
             return False
         else:

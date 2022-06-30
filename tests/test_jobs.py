@@ -1,6 +1,7 @@
 import pytest
 
 from passtry import (
+    exceptions,
     logs,
     jobs,
 )
@@ -54,12 +55,12 @@ def test_combining_lists_empty():
 
 def test_uri_split_exclusive_services_ports():
     """Port numbers cannot be declared if more than one service is tested"""
-    with pytest.raises(Exception):
+    with pytest.raises(exceptions.ConfigurationError):
         jobs.Job().split('ssh+ftp://admin:password@example.com:22')
 
 
-def test_uri_split_service_exists():
-    with pytest.raises(Exception):
+def test_uri_split_service_doesnt_exist():
+    with pytest.raises(exceptions.ConfigurationError):
         jobs.Job().split('hXXp://example.com')
 
 
@@ -121,3 +122,19 @@ def test_uri_split_multiple_targets():
     assert job.split('ssh+ftp://admin+root+user:password+Passw0rd@example.com+other.example.com') == [
         ['ssh', 'ftp'], ['admin', 'root', 'user'], ['password', 'Passw0rd'], ['example.com', 'other.example.com'], None
     ]
+
+
+def test_max_failed_no_results(ssh_service):
+    ssh_host, ssh_port = ssh_service
+    tasks = [
+        ('ssh', 'user', 'Password', ssh_host, 9991),
+        ('ssh', 'user', 'Password', ssh_host, 9992),
+        ('ssh', 'user', 'Password', ssh_host, 9993),
+        ('ssh', 'user', 'Password', ssh_host, 9994),
+        ('ssh', 'user', 'Password', ssh_host, 9995),
+        ('ssh', 'user', 'P@55w0rd!', ssh_host, ssh_port),
+    ]
+    job = jobs.Job(max_failed=3)
+    job.start(tasks)
+    assert job.failures.get() == 3
+    assert job.results.get() == list()

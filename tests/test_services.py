@@ -10,7 +10,5 @@ def test_ssh_connection(ssh_service):
         ('ssh', 'user', 'Password', ssh_host, ssh_port),
         ('ssh', 'user', 'P@55w0rd!', ssh_host, ssh_port),
     ]
-    job.consume(tasks)
-    job.start()
-    output = [job.prettify(result) for result in job.results if result]
-    assert output == [f'ssh://user:P@55w0rd!@{ssh_host}:{ssh_port}']
+    job.start(tasks)
+    assert job.output() == [f'ssh://user:P@55w0rd!@{ssh_host}:{ssh_port}']
