@@ -58,10 +58,11 @@ class Results:
 
 class Job:
 
-    def __init__(self, workers_no=DEFAULT_WORKERS_NO, max_failed=DEFAULT_MAX_FAILED, abort_match=False):
+    def __init__(self, workers_no=DEFAULT_WORKERS_NO, max_failed=DEFAULT_MAX_FAILED, abort_match=False, watch_failures=True):
         self.workers_no = workers_no
-        self.abort_match = abort_match
         self.max_failed = max_failed
+        self.abort_match = abort_match
+        self.watch_failures = watch_failures
         self.failures = Counter()
         self.attempts = Counter()
         self.results = Results()
@@ -128,12 +129,13 @@ class Job:
                 result = cls.execute(task)
             except exceptions.ConnectionFailed:
                 logs.debug(f'Connection failed for {task}')
-                if failures.get() == self.max_failed:
-                    logs.debug(f'Too many failures')
+                if self.watch_failures and failures.get() == self.max_failed:
+                    logs.info(f'Too many failed connections, aborting!')
                     self.tasks_clear(queue)
                 else:
+                    if self.watch_failures:
+                        queue.put(task)
                     failures.inc()
-                    queue.put(task)
                 continue
             except Exception as exc:
                 logs.debug(f'Task failed with {exc}')
