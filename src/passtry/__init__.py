@@ -2,6 +2,7 @@ import argparse
 import sys
 
 from passtry import (
+    exceptions,
     jobs,
     services,
 )
@@ -10,16 +11,23 @@ from passtry import (
 class ArgSplitAction(argparse.Action):
 
     def __call__(self, parser, namespace, values, option_string):
-        setattr(namespace, self.dest, values.split('+'))
+        setattr(namespace, self.dest, set(values.split('+')))
 
 
-def read_args_or_file(parsed, name):
-    result = None
-    if hasattr(parsed, name):
-        result = getattr(parsed, name)
-    elif hasattr(parsed, name + '_file'):
-        with getattr(parsed, name + '_file') as fil:
-            result = [line.strip() for line in fil]
+def read_file(parsed, file_attr):
+    fil = getattr(parsed, file_attr, tuple())
+    return {line.strip() for line in fil}
+
+
+def read_combo(parsed, file_attr, delimiter=None):
+    fil = getattr(parsed, file_attr, tuple())
+    result = list()
+    try:
+        for line in fil:
+            username, password = line.strip().split(delimiter)
+            result.append([None, username, password, None, None])
+    except ValueError:
+        raise exceptions.DataError('Error occured while processing combo file')
     return result
 
 
@@ -28,21 +36,18 @@ def parse_args(args):
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.print_usage = parser.print_help
-    group_services = parser.add_mutually_exclusive_group()
-    group_usernames = parser.add_mutually_exclusive_group()
-    group_passwords = parser.add_mutually_exclusive_group()
-    group_targets = parser.add_mutually_exclusive_group()
-    group_ports = parser.add_mutually_exclusive_group()
-    group_services.add_argument('-s', '--services', action=ArgSplitAction, default=argparse.SUPPRESS, help='Services (`+` separated)')
-    group_services.add_argument('-sf', '--services-file', type=argparse.FileType('r'), default=argparse.SUPPRESS, help='Services file')
-    group_usernames.add_argument('-U', '--usernames', action=ArgSplitAction, default=argparse.SUPPRESS, help='Usernames (`+` separated)')
-    group_usernames.add_argument('-Uf', '--usernames-file', type=argparse.FileType('r'), default=argparse.SUPPRESS, help='Usernames file')
-    group_passwords.add_argument('-P', '--passwords', action=ArgSplitAction, default=argparse.SUPPRESS, help='Passwords (`+` separated)')
-    group_passwords.add_argument('-Pf', '--passwords-file', type=argparse.FileType('r'), default=argparse.SUPPRESS, help='Passwords file')
-    group_targets.add_argument('-t', '--targets', action=ArgSplitAction, default=argparse.SUPPRESS, help='Targets (`+` separated)')
-    group_targets.add_argument('-tf', '--targets-file', type=argparse.FileType('r'), default=argparse.SUPPRESS, help='Targets file')
-    group_ports.add_argument('-p', '--ports', action=ArgSplitAction, default=argparse.SUPPRESS, help='Ports (`+` separated)')
-    group_ports.add_argument('-pf', '--ports-file', type=argparse.FileType('r'), default=argparse.SUPPRESS, help='Ports file')
+    parser.add_argument('-s', '--services', action=ArgSplitAction, default=set(), help='Services (`+` separated)')
+    parser.add_argument('-sf', '--services-file', type=argparse.FileType('r'), default=argparse.SUPPRESS, help='Services file')
+    parser.add_argument('-U', '--usernames', action=ArgSplitAction, default=set(), help='Usernames (`+` separated)')
+    parser.add_argument('-Uf', '--usernames-file', type=argparse.FileType('r'), default=argparse.SUPPRESS, help='Usernames file')
+    parser.add_argument('-P', '--passwords', action=ArgSplitAction, default=set(), help='Passwords (`+` separated)')
+    parser.add_argument('-Pf', '--passwords-file', type=argparse.FileType('r'), default=argparse.SUPPRESS, help='Passwords file')
+    parser.add_argument('-Cf', '--combo-file', type=argparse.FileType('r'), default=argparse.SUPPRESS, help='Combo file')
+    parser.add_argument('-Cd', '--combo-delimiter', default=':', help='Combo file delimiter')
+    parser.add_argument('-t', '--targets', action=ArgSplitAction, default=set(), help='Targets (`+` separated)')
+    parser.add_argument('-tf', '--targets-file', type=argparse.FileType('r'), default=argparse.SUPPRESS, help='Targets file')
+    parser.add_argument('-p', '--ports', action=ArgSplitAction, default=set(), help='Ports (`+` separated)')
+    parser.add_argument('-pf', '--ports-file', type=argparse.FileType('r'), default=argparse.SUPPRESS, help='Ports file')
     parser.add_argument('-tN', '--threads-number', type=int, default=jobs.THREADS_NUMBER, help='Number of worker threads')
     parser.add_argument('-fN', '--failed-number', type=int, default=jobs.FAILED_NUMBER, help='Maximum number of failed connections')
     parser.add_argument('-cT', '--connections-timeout', type=int, default=jobs.CONNECTIONS_TIMEOUT, help='Connections timeout')
@@ -64,14 +69,16 @@ def parse_args(args):
         abort_match=parsed.enable_first,
         watch_failures=parsed.disable_failures
     )
-    services_args = read_args_or_file(parsed, 'services')
-    usernames_args = read_args_or_file(parsed, 'usernames')
-    passwords_args = read_args_or_file(parsed, 'passwords')
-    targets_args = read_args_or_file(parsed, 'targets')
-    ports_args = read_args_or_file(parsed, 'ports')
-    final_args = job.normalize(services_args, usernames_args, passwords_args, targets_args, ports_args)
+    services_set = read_file(parsed, 'services_file').union(parsed.services)
+    usernames_set = read_file(parsed, 'usernames_file').union(parsed.usernames)
+    passwords_set = read_file(parsed, 'passwords_file').union(parsed.passwords)
+    targets_set = read_file(parsed, 'targets_file').union(parsed.targets)
+    ports_set = read_file(parsed, 'ports_file').union(parsed.ports)
+    final_args = job.combine(services_set, usernames_set, passwords_set, targets_set, ports_set)
+    combo_args = read_combo(parsed, 'combo_file', parsed.combo_delimiter)
+    final_args.extend(combo_args)
     if parsed.uri:
-        normal_uri = job.normalize(*job.split(parsed.uri))
+        normal_uri = job.combine(*job.split(parsed.uri))
         # NOTE: If URI was defined and ports is None use the URI schema value for given class
         uri_ports = normal_uri[0][jobs.TASK_STRUCT_BY_NAME['ports']]
         uri_services = normal_uri[0][jobs.TASK_STRUCT_BY_NAME['services']]
@@ -96,7 +103,10 @@ def parse_args(args):
 
 
 def main():
-    results = parse_args(sys.argv[1:])
+    try:
+        results = parse_args(sys.argv[1:])
+    except (exceptions.ConfigurationError, exceptions.DataError) as exc:
+        results = [exc.args[0]]
     print('\n'.join(results))
 
 

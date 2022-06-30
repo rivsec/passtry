@@ -2,8 +2,10 @@ FROM debian:11-slim
 ENV DEBIAN_FRONTEND noninteractive
 RUN useradd -m -d /home/user user -s /bin/bash
 RUN useradd -m -d /home/user2 user2 -s /bin/bash
+RUN useradd -m -d /home/user3 user3 -s /bin/bash
 RUN echo "user:P@55w0rd!" | chpasswd
 RUN echo "user2:P@55w0rd!" | chpasswd
+RUN echo "user3:PassPass" | chpasswd
 RUN mkdir /var/run/sshd
 RUN apt-get -qq update \
     && apt-get -qq --no-install-recommends install openssh-server \

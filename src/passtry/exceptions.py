@@ -4,3 +4,7 @@ class ConnectionFailed(Exception):
 
 class ConfigurationError(Exception):
     pass
+
+
+class DataError(Exception):
+    pass

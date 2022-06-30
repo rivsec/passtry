@@ -14,7 +14,7 @@ def test_combining_lists():
     passwords = ('Password', 'Passw0rd')
     ports = (22, 8222)
     services = ('ssh',)
-    assert job.normalize(services, usernames, passwords, targets, ports) == [
+    assert job.combine(services, usernames, passwords, targets, ports) == [
         ['ssh', 'root', 'Password', 'example.com', 22],
         ['ssh', 'root', 'Password', 'example.com', 8222],
         ['ssh', 'root', 'Password', 'ssh.example.com', 22],
@@ -41,7 +41,7 @@ def test_combining_lists_empty():
     passwords = None
     ports = (22, 8222)
     services = ('ssh',)
-    assert job.normalize(services, usernames, passwords, targets, ports) == [
+    assert job.combine(services, usernames, passwords, targets, ports) == [
         ['ssh', 'root', None, 'example.com', 22],
         ['ssh', 'root', None, 'example.com', 8222],
         ['ssh', 'root', None, 'ssh.example.com', 22],

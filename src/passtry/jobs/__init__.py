@@ -88,8 +88,9 @@ class Job:
     def task_to_dict(self, task):
         return {TASK_STRUCT[idx]: tsk for idx, tsk in enumerate(task)}
 
-    def normalize(self, *iterables):
-        iters = [[None] if params is None else params for params in iterables]
+    def combine(self, *iterables):
+        # NOTE: Replace empty set() with [None] for common "interface"
+        iters = [params if params else [None] for params in iterables]
         return [list(params) for params in itertools.product(*iters)]
 
     def merge(self, primary, secondary):

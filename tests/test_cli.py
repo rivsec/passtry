@@ -1,6 +1,9 @@
 import shlex
 
+import pytest
+
 import passtry
+from passtry import exceptions
 
 
 def test_list_services(capsys):
@@ -50,6 +53,23 @@ def test_split_args(capsys, ssh_service, data_dir):
     ssh_host, ssh_port = ssh_service
     args = shlex.split(f'-s ssh -U user -P "Password+P@55w0rd!+Passw0rd" -u ssh://{ssh_host}:{ssh_port}')
     assert passtry.parse_args(args) == [f'ssh://user:P@55w0rd!@{ssh_host}:{ssh_port}']
+
+
+def test_adding_args_files_combo(capsys, ssh_service, data_dir):
+    ssh_host, ssh_port = ssh_service
+    args = shlex.split(f'-s ssh -U user+user2 -P "Password+P@55w0rd!+Passw0rd" -Uf {data_dir}/usernames.txt -Pf {data_dir}/passwords.txt -Cf {data_dir}/combo.txt -u ssh://{ssh_host}:{ssh_port}')
+    assert set(passtry.parse_args(args)) == {
+        f'ssh://user:P@55w0rd!@{ssh_host}:{ssh_port}',
+        f'ssh://user2:P@55w0rd!@{ssh_host}:{ssh_port}',
+        f'ssh://user3:PassPass@{ssh_host}:{ssh_port}',
+    }
+
+
+def test_bad_combo(capsys, ssh_service, data_dir):
+    ssh_host, ssh_port = ssh_service
+    args = shlex.split(f'-s ssh -Cf {data_dir}/bad_combo.txt -u ssh://{ssh_host}')
+    with pytest.raises(exceptions.DataError):
+        passtry.parse_args(args)
 
 
 def test_doesnt_fail_without(capsys, ssh_service, data_dir):
