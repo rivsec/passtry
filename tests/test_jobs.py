@@ -138,3 +138,18 @@ def test_max_failed_no_results(ssh_service):
     job.start(tasks)
     assert job.failures.get() == 3
     assert job.results.get() == list()
+
+
+def test_abort_match(ssh_service):
+    ssh_host, ssh_port = ssh_service
+    tasks = [
+        ('ssh', 'user', 'Password', ssh_host, ssh_port),
+        ('ssh', 'user', 'Password', ssh_host, ssh_port),
+        ('ssh', 'user', 'P@55w0rd!', ssh_host, ssh_port),
+        ('ssh', 'user', 'Password', ssh_host, ssh_port),
+        ('ssh', 'user', 'Password', ssh_host, ssh_port),
+    ]
+    job = jobs.Job(abort_match=True)
+    job.start(tasks)
+    assert job.attempts.get() == 1
+    assert job.results.get() == [('ssh', 'user', 'P@55w0rd!', '127.0.0.1', 22)]

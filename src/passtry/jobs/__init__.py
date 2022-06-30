@@ -58,11 +58,13 @@ class Results:
 
 class Job:
 
-    def __init__(self, workers_no=DEFAULT_WORKERS_NO, max_failed=DEFAULT_MAX_FAILED):
+    def __init__(self, workers_no=DEFAULT_WORKERS_NO, max_failed=DEFAULT_MAX_FAILED, abort_match=False):
         self.workers_no = workers_no
-        self.failures = Counter()
-        self.results = Results()
+        self.abort_match = abort_match
         self.max_failed = max_failed
+        self.failures = Counter()
+        self.attempts = Counter()
+        self.results = Results()
         self.queue = queue.Queue()
 
     def task_to_dict(self, task):
@@ -112,7 +114,7 @@ class Job:
             queue.unfinished_tasks = 0
             queue.all_tasks_done.notify_all()
 
-    def worker(self, failures, queue, results):
+    def worker(self, failures, attempts, queue, results):
         while True:
             task = queue.get()
             if task is None:
@@ -136,9 +138,12 @@ class Job:
             except Exception as exc:
                 logs.debug(f'Task failed with {exc}')
             else:
+                attempts.inc()
                 if result:
                     logs.debug(f'Connection successful for {task}')
                     results.add(task)
+                    if self.abort_match:
+                        self.tasks_clear(queue)
             finally:
                 # NOTE: This "magic" is due to queue possibly being emptied in another thread.
                 if queue.unfinished_tasks:
@@ -153,6 +158,7 @@ class Job:
                 target=self.worker,
                 args=(
                     self.failures,
+                    self.attempts,
                     self.queue,
                     self.results
                 ),

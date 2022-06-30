@@ -47,10 +47,11 @@ def parse_args(args):
     parser.add_argument('-jF', '--jobs-failed', default=jobs.DEFAULT_MAX_FAILED, help='Maximum number of failed connections')
     parser.add_argument('-u', '--uri', help='URI connection string (takes precedence over other arguments)')
     parser.add_argument('--list-services', action='store_true', help='Show available services')
+    parser.add_argument('-aB', '--abort-match', default=False, action='store_true', help='Abort processing on first match')
     parsed = parser.parse_args(args)
     if parsed.list_services:
         return ['Services: ' + ', '.join((services.Service.registry.keys()))]
-    job = jobs.Job(workers_no=parsed.jobs_workers, max_failed=parsed.jobs_failed)
+    job = jobs.Job(workers_no=parsed.jobs_workers, max_failed=parsed.jobs_failed, abort_match=parsed.abort_match)
     services_args = read_args_or_file(parsed, 'services')
     usernames_args = read_args_or_file(parsed, 'usernames')
     passwords_args = read_args_or_file(parsed, 'passwords')

@@ -67,3 +67,9 @@ def test_default_port_from_service_as_uri(capsys, ssh_service, data_dir):
     ssh_host, ssh_port = ssh_service
     args = shlex.split(f'-P "P@55w0rd!" -u ssh://user@{ssh_host}')
     assert passtry.parse_args(args) == [f'ssh://user:P@55w0rd!@{ssh_host}:{ssh_port}']
+
+
+def test_abort_match(capsys, ssh_service, data_dir):
+    ssh_host, ssh_port = ssh_service
+    args = shlex.split(f'-aB -P "Password+P@55w0rd!+password" -u ssh://user+user2@{ssh_host}')
+    assert passtry.parse_args(args) == [f'ssh://user:P@55w0rd!@{ssh_host}:{ssh_port}']
