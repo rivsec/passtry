@@ -59,7 +59,7 @@ def parse_args(args):
     final_args = job.normalize(services_args, usernames_args, passwords_args, targets_args, ports_args)
     if parsed.uri:
         normal_uri = job.normalize(*job.split(parsed.uri))
-        job.merge(normal_uri, final_args)
+        final_args= job.merge(normal_uri, final_args)
 
     first_row = final_args[0]
     for idx, val in enumerate(first_row):
@@ -67,7 +67,7 @@ def parse_args(args):
             missing = jobs.TASK_STRUCT[idx]
             if missing == 'ports':
                 service = first_row[jobs.TASK_STRUCT_BY_NAME['services']]
-                job.merge(
+                final_args = job.merge(
                     [[None, None, None, None, services.Service.registry[service].port]],
                     final_args
                 )

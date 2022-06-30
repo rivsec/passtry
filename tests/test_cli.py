@@ -25,7 +25,13 @@ def test_no_results(capsys, ssh_service):
 def test_uri_precedence(capsys, ssh_service):
     ssh_host, ssh_port = ssh_service
     args = shlex.split(f'-s http -U user -P P@55w0rd! -p 80+8080 -u ssh://{ssh_host}:{ssh_port}')
-    assert passtry.parse_args(args) == [f'ssh://user:P@55w0rd!@{ssh_host}:{ssh_port}', f'ssh://user:P@55w0rd!@{ssh_host}:{ssh_port}']
+    assert passtry.parse_args(args) == [f'ssh://user:P@55w0rd!@{ssh_host}:{ssh_port}']
+
+
+def test_uri_precedence_three_ports(capsys, ssh_service):
+    ssh_host, ssh_port = ssh_service
+    args = shlex.split(f'-s http -U user -P P@55w0rd! -p 80+8080+8088 -u ssh://{ssh_host}:{ssh_port}')
+    assert passtry.parse_args(args) == [f'ssh://user:P@55w0rd!@{ssh_host}:{ssh_port}']
 
 
 def test_from_file(capsys, ssh_service, data_dir):

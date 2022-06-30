@@ -74,10 +74,14 @@ class Job:
 
     def merge(self, primary, secondary):
         mapping = primary[0]
+        result = list()
         for ele in secondary:
             for idx, _ in enumerate(ele):
                 if mapping[idx]:
                     ele[idx] = mapping[idx]
+            if not result.count(ele):
+                result.append(ele)
+        return result
 
     def prettify(self, task):
         return '{services}://{usernames}:{passwords}@{hosts}:{ports}'.format(**self.task_to_dict(task))
