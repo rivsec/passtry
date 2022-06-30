@@ -73,3 +73,9 @@ def test_abort_match(capsys, ssh_service, data_dir):
     ssh_host, ssh_port = ssh_service
     args = shlex.split(f'-eF -P "Password+P@55w0rd!+password" -u ssh://user+user2@{ssh_host}')
     assert passtry.parse_args(args) == [f'ssh://user:P@55w0rd!@{ssh_host}:{ssh_port}']
+
+
+def test_use_all_args(capsys, ssh_service, data_dir):
+    ssh_host, ssh_port = ssh_service
+    args = shlex.split(f'-s ftp -U user+user2 -eF -P "Password+P@55w0rd!" -t {ssh_host} -p 21 -tN 3 -fN 4 -cT 5 -tW 1 -tR 1 -eF -dF -u ssh://user@{ssh_host}')
+    assert passtry.parse_args(args) == [f'ssh://user:P@55w0rd!@{ssh_host}:{ssh_port}']

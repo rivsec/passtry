@@ -134,7 +134,7 @@ def test_max_failed_no_results(ssh_service):
         ('ssh', 'user', 'Password', ssh_host, 9995),
         ('ssh', 'user', 'P@55w0rd!', ssh_host, ssh_port),
     ]
-    job = jobs.Job(max_failed=3)
+    job = jobs.Job(failed_number=3)
     job.start(tasks)
     assert job.failures.get() == 3
     assert job.results.get() == list()
@@ -150,7 +150,7 @@ def test_max_failed_disable_failures(ssh_service):
         ('ssh', 'user', 'Password', ssh_host, 9995),
         ('ssh', 'user', 'P@55w0rd!', ssh_host, ssh_port),
     ]
-    job = jobs.Job(max_failed=3, watch_failures=False)
+    job = jobs.Job(failed_number=3, watch_failures=False)
     job.start(tasks)
     assert job.failures.get() == 5
     assert job.results.get() == [('ssh', 'user', 'P@55w0rd!', '127.0.0.1', 22)]

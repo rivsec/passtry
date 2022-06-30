@@ -19,7 +19,7 @@ class FTP(services.Service):
         }
 
     @classmethod
-    def execute(cls, task):
+    def execute(cls, task, timeout):
         logs.debug(f'{cls.__name__} is executing {task}')
         kwargs = cls.map_kwargs(task)
         return True

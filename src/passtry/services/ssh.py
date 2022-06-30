@@ -11,7 +11,6 @@ class SSH(services.Service):
 
     port = 22
     service = 'ssh'
-    timeout = 20
 
     @classmethod
     def map_kwargs(cls, task):
@@ -23,12 +22,12 @@ class SSH(services.Service):
         }
 
     @classmethod
-    def execute(cls, task):
+    def execute(cls, task, timeout):
         logs.debug(f'{cls.__name__} is executing {task}')
         kwargs = cls.map_kwargs(task)
         try:
             transport = paramiko.Transport((kwargs['hostname'], kwargs['port']))
-            transport.start_client()
+            transport.start_client(timeout=timeout)
         except paramiko.ssh_exception.SSHException as exc:
             logs.debug(f'{cls.__name__} connection failed (timed out?) for {task}')
             raise exceptions.ConnectionFailed

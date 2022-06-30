@@ -3,7 +3,9 @@ import re
 import uuid
 from urllib import parse
 import shlex
+import random
 import threading
+import time
 import queue
 
 from passtry import (
@@ -22,8 +24,11 @@ TASK_STRUCT = {
     4: 'ports',
 }
 TASK_STRUCT_BY_NAME = {val: idx for idx, val in enumerate(TASK_STRUCT.values())}
-DEFAULT_WORKERS_NO = 8
-DEFAULT_MAX_FAILED = 10
+THREADS_NUMBER = 8
+FAILED_NUMBER = 10
+CONNECTIONS_TIMEOUT = 10
+TIME_WAIT = 0.1
+TIME_RANDOMIZE = 0
 
 
 class Counter:
@@ -58,9 +63,21 @@ class Results:
 
 class Job:
 
-    def __init__(self, workers_no=DEFAULT_WORKERS_NO, max_failed=DEFAULT_MAX_FAILED, abort_match=False, watch_failures=True):
-        self.workers_no = workers_no
-        self.max_failed = max_failed
+    def __init__(
+            self,
+            threads_number=THREADS_NUMBER,
+            failed_number=FAILED_NUMBER,
+            connections_timeout=CONNECTIONS_TIMEOUT,
+            time_wait=TIME_WAIT,
+            time_randomize=TIME_RANDOMIZE,
+            abort_match=False,
+            watch_failures=True
+        ):
+        self.threads_number = threads_number
+        self.failed_number = failed_number
+        self.connections_timeout = connections_timeout
+        self.time_wait = time_wait
+        self.time_randomize = time_randomize
         self.abort_match = abort_match
         self.watch_failures = watch_failures
         self.failures = Counter()
@@ -126,10 +143,10 @@ class Job:
             except KeyError:
                 raise exceptions.ConfigurationError(f'Unknown service `{task[0]}`')
             try:
-                result = cls.execute(task)
+                result = cls.execute(task, self.connections_timeout)
             except exceptions.ConnectionFailed:
                 logs.debug(f'Connection failed for {task}')
-                if self.watch_failures and failures.get() == self.max_failed:
+                if self.watch_failures and failures.get() == self.failed_number:
                     logs.info(f'Too many failed connections, aborting!')
                     self.tasks_clear(queue)
                 else:
@@ -137,8 +154,6 @@ class Job:
                         queue.put(task)
                     failures.inc()
                 continue
-            except Exception as exc:
-                logs.debug(f'Task failed with {exc}')
             else:
                 attempts.inc()
                 if result:
@@ -150,12 +165,16 @@ class Job:
                 # NOTE: This "magic" is due to queue possibly being emptied in another thread.
                 if queue.unfinished_tasks:
                     queue.task_done()
+                wait_time = self.time_wait
+                if self.time_randomize:
+                    wait_time += round(random.uniform(0, self.time_randomize), 1)
+                time.sleep(wait_time)
 
     def output(self):
         return [self.prettify(result) for result in self.results.get() if result]
 
     def start(self, tasks):
-        for _ in range(self.workers_no):
+        for _ in range(self.threads_number):
             threading.Thread(
                 target=self.worker,
                 args=(
