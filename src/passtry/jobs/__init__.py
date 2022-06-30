@@ -102,14 +102,17 @@ class Job:
             uri_ports = [parsed.port] if parsed.port else None
         return [uri_services, uri_usernames, uri_passwords, uri_targets, uri_ports]
 
-    def worker(self, finished, failures, queue, results):
+    def tasks_clear(self, queue):
+        with queue.mutex:
+            queue.queue.clear()
+            queue.unfinished_tasks = 0
+            queue.all_tasks_done.notify_all()
+
+    def worker(self, failures, queue, results):
         while True:
             task = queue.get()
-            if finished.is_set() or task is None or failures.get() == self.max_failed:
-                with queue.mutex:
-                    queue.queue.clear()
-                    queue.unfinished_tasks = 0
-                    queue.all_tasks_done.notify_all()
+            if task is None:
+                self.tasks_clear(queue)
                 continue
             try:
                 cls = services.Service.registry[task[0]]
@@ -121,7 +124,7 @@ class Job:
                 logs.debug(f'Connection failed for {task}')
                 if failures.get() == self.max_failed:
                     logs.debug(f'Too many failures')
-                    finished.set()
+                    self.tasks_clear(queue)
                 else:
                     failures.inc()
                     queue.put(task)
@@ -141,12 +144,10 @@ class Job:
         return [self.prettify(result) for result in self.results.get() if result]
 
     def start(self, tasks):
-        finished = threading.Event()
         for _ in range(self.workers_no):
             threading.Thread(
                 target=self.worker,
                 args=(
-                    finished,
                     self.failures,
                     self.queue,
                     self.results
