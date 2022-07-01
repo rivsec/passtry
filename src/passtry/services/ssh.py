@@ -31,11 +31,12 @@ class SSH(services.Service):
         except paramiko.ssh_exception.SSHException as exc:
             logs.debug(f'{cls.__name__} connection failed (timed out?) for {task}')
             raise exceptions.ConnectionFailed
+        result = None
         try:
             transport.auth_password(kwargs['username'], kwargs['password'])
         except paramiko.ssh_exception.AuthenticationException:
-            return False
+            result = False
         else:
-            return True
-        finally:
-            transport.close()
+            result = True
+        transport.close()
+        return result

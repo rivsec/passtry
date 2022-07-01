@@ -26,11 +26,12 @@ class FTP(services.Service):
         kwargs = cls.map_kwargs(task)
         ftp = ftplib.FTP()
         ftp.connect(kwargs['host'], kwargs['port'])
+        result = None
         try:
             ftp.login(kwargs['user'], kwargs['passwd'])
         except ftplib.error_perm:
-            return False
+            result = False
         else:
-            return True
-        finally:
-            ftp.close()
+            result = True
+        ftp.quit()
+        return result
