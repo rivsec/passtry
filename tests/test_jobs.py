@@ -11,10 +11,10 @@ def test_combining_lists():
     job = jobs.Job()
     targets = ('example.com', 'ssh.example.com')
     usernames = ('root', 'guest')
-    passwords = ('Password', 'Passw0rd')
+    secrets = ('Password', 'Passw0rd')
     ports = (22, 8222)
     services = ('ssh',)
-    assert job.combine(services, usernames, passwords, targets, ports) == [
+    assert job.combine(services, usernames, secrets, targets, ports) == [
         ['ssh', 'root', 'Password', 'example.com', 22],
         ['ssh', 'root', 'Password', 'example.com', 8222],
         ['ssh', 'root', 'Password', 'ssh.example.com', 22],
@@ -38,10 +38,10 @@ def test_combining_lists_empty():
     job = jobs.Job()
     targets = ('example.com', 'ssh.example.com')
     usernames = ('root', 'guest')
-    passwords = None
+    secrets = None
     ports = (22, 8222)
     services = ('ssh',)
-    assert job.combine(services, usernames, passwords, targets, ports) == [
+    assert job.combine(services, usernames, secrets, targets, ports) == [
         ['ssh', 'root', None, 'example.com', 22],
         ['ssh', 'root', None, 'example.com', 8222],
         ['ssh', 'root', None, 'ssh.example.com', 22],
@@ -95,7 +95,7 @@ def test_uri_split_multiple_services():
     ]
 
 
-def test_uri_split_plus_in_passwords():
+def test_uri_split_plus_in_secrets():
     job = jobs.Job()
     result = job.split('ssh://admin:password+\'pass+word2\'+"password+3"@example.com')
     assert job.split('ssh://admin:password+\'pass+word2\'+"password+3"@example.com') == [
@@ -130,17 +130,37 @@ def test_max_failed_no_results(ssh_service):
         ('ssh', 'user', 'Password', ssh_host, 9991),
         ('ssh', 'user', 'Password', ssh_host, 9992),
         ('ssh', 'user', 'Password', ssh_host, 9993),
+        ('ssh', 'user', 'Password', ssh_host, ssh_port),
         ('ssh', 'user', 'Password', ssh_host, 9994),
         ('ssh', 'user', 'Password', ssh_host, 9995),
         ('ssh', 'user', 'P@55w0rd!', ssh_host, ssh_port),
     ]
-    job = jobs.Job(failed_number=3)
+    # NOTE: Reducing number of threads to get correct number of failures (sequential execution).
+    job = jobs.Job(threads_number=1, failed_number=3)
     job.start(tasks)
     assert job.failures.get() == 3
+    assert job.attempts.get() == 0
     assert job.results.get() == list()
 
 
-def test_max_failed_disable_failures(ssh_service):
+def test_max_failed_increased_results(ssh_service):
+    ssh_host, ssh_port = ssh_service
+    tasks = [
+        ('ssh', 'user', 'Password', ssh_host, 9991),
+        ('ssh', 'user', 'Password', ssh_host, ssh_port),
+        ('ssh', 'user', 'Password', ssh_host, 9992),
+        ('ssh', 'user', 'P@55w0rd!', ssh_host, ssh_port),
+    ]
+    # NOTE: Reducing number of threads to get correct number of failures (sequential execution).
+    # NOTE: Must first match so the task put back to the queue will not increase the failures value.
+    job = jobs.Job(threads_number=1, failed_number=3, first_match=True)
+    job.start(tasks)
+    assert job.failures.get() == 2
+    assert job.attempts.get() == 2
+    assert job.results.get() == [('ssh', 'user', 'P@55w0rd!', '127.0.0.1', 22)]
+
+
+def test_max_failed_disable_failures_first_match(ssh_service):
     ssh_host, ssh_port = ssh_service
     tasks = [
         ('ssh', 'user', 'Password', ssh_host, 9991),
@@ -149,14 +169,18 @@ def test_max_failed_disable_failures(ssh_service):
         ('ssh', 'user', 'Password', ssh_host, 9994),
         ('ssh', 'user', 'Password', ssh_host, 9995),
         ('ssh', 'user', 'P@55w0rd!', ssh_host, ssh_port),
+        ('ssh', 'user', 'Password', ssh_host, 9996),
+        ('ssh', 'user', 'Password', ssh_host, 9997),
     ]
-    job = jobs.Job(failed_number=3, watch_failures=False)
+    # NOTE: Reducing number of threads to get correct number of failures (sequential execution).
+    job = jobs.Job(threads_number=1, failed_number=3, watch_failures=False, first_match=True)
     job.start(tasks)
     assert job.failures.get() == 5
+    assert job.attempts.get() == 1
     assert job.results.get() == [('ssh', 'user', 'P@55w0rd!', '127.0.0.1', 22)]
 
 
-def test_abort_match(ssh_service):
+def test_first_match(ssh_service):
     ssh_host, ssh_port = ssh_service
     tasks = [
         ('ssh', 'user', 'Password', ssh_host, ssh_port),
@@ -165,7 +189,7 @@ def test_abort_match(ssh_service):
         ('ssh', 'user', 'Password', ssh_host, ssh_port),
         ('ssh', 'user', 'Password', ssh_host, ssh_port),
     ]
-    job = jobs.Job(abort_match=True)
+    job = jobs.Job(first_match=True)
     job.start(tasks)
     assert job.attempts.get() == 1
     assert job.results.get() == [('ssh', 'user', 'P@55w0rd!', '127.0.0.1', 22)]
