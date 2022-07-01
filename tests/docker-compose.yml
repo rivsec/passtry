@@ -6,3 +6,10 @@ services:
       dockerfile: ./dockers/debian-latest-openssh.docker
     ports:
       - "22:22"
+  debian-latest-vsftpd:
+    build:
+      context: .
+      dockerfile: ./dockers/debian-latest-vsftpd.docker
+    ports:
+      - "21:21"
+      - "50000-50001:50000-50001"
