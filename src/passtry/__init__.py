@@ -64,7 +64,8 @@ def parse_args(args):
     parsed = parser.parse_args(args)
     logs.init(parsed.loglevel)
     if parsed.list_services:
-        return ['Services: ' + ', '.join((services.Service.registry.keys()))]
+        print('Services: ' + ', '.join(sorted(services.Service.registry.keys())))
+        sys.exit(0)
 
     logs.info('Preparing...')
     job = jobs.Job(

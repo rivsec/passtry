@@ -8,7 +8,12 @@ from passtry import exceptions
 
 def test_list_services(capsys):
     args = shlex.split('--list-services')
-    assert passtry.parse_args(args) == ['Services: ssh, http, ftp']
+    with pytest.raises(SystemExit) as exc:
+        passtry.parse_args(args)
+    assert exc.type == SystemExit
+    assert exc.value.code == 0
+    out, err = capsys.readouterr()
+    assert out == 'Services: ftp, http, http-basic, ssh\n'
 
 
 def test_one_result(capsys, ssh_service):
