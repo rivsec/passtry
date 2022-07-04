@@ -30,6 +30,20 @@ def ftp_service(docker_ip, docker_services):
 
 
 @pytest.fixture(scope='session')
+def http_service(docker_ip, docker_services):
+    docker_port = docker_services.port_for('nginx-latest', 80)
+    docker_services.wait_until_responsive(check=lambda: socket_available(docker_ip, docker_port), timeout=30, pause=1)
+    return docker_ip, docker_port
+
+
+@pytest.fixture(scope='session')
+def https_service(docker_ip, docker_services):
+    docker_port = docker_services.port_for('nginx-latest', 443)
+    docker_services.wait_until_responsive(check=lambda: socket_available(docker_ip, docker_port), timeout=30, pause=1)
+    return docker_ip, docker_port
+
+
+@pytest.fixture(scope='session')
 def data_dir():
     cwd = pathlib.Path(os.getenv('PYTEST_CURRENT_TEST').split('::')[0]).parent
     return cwd / 'data'

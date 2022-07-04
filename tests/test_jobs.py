@@ -67,31 +67,31 @@ def test_uri_split_service_doesnt_exist():
 def test_uri_split_set_port():
     job = jobs.Job()
     assert job.split('ssh://admin:password@example.com:22') == [
-        ['ssh'], ['admin'], ['password'], ['example.com'], [22]
+        ['ssh'], ['admin'], ['password'], ['example.com'], [22], None
     ]
     assert job.split('ssh://admin:password@example.com:2222') == [
-        ['ssh'], ['admin'], ['password'], ['example.com'], [2222]
+        ['ssh'], ['admin'], ['password'], ['example.com'], [2222], None
     ]
 
 
 def test_uri_split_no_default_port():
     job = jobs.Job()
-    assert job.split('http://example.com') == [
-        ['http'], None, None, ['example.com'], None
+    assert job.split('http-basic://example.com') == [
+        ['http-basic'], None, None, ['example.com'], None, None
     ]
 
 
 def test_uri_split_override_port():
     job = jobs.Job()
-    assert job.split('http://example.com:81') == [
-        ['http'], None, None, ['example.com'], [81],
+    assert job.split('http-basic://example.com:81') == [
+        ['http-basic'], None, None, ['example.com'], [81], None
     ]
 
 
 def test_uri_split_multiple_services():
     job = jobs.Job()
     assert job.split('ssh+ftp://admin:password@example.com') == [
-        ['ssh', 'ftp'], ['admin'], ['password'], ['example.com'], None
+        ['ssh', 'ftp'], ['admin'], ['password'], ['example.com'], None, None
     ]
 
 
@@ -99,28 +99,28 @@ def test_uri_split_plus_in_secrets():
     job = jobs.Job()
     result = job.split('ssh://admin:password+\'pass+word2\'+"password+3"@example.com')
     assert job.split('ssh://admin:password+\'pass+word2\'+"password+3"@example.com') == [
-        ['ssh'], ['admin'], ['password', 'pass+word2', 'password+3'], ['example.com'], None
+        ['ssh'], ['admin'], ['password', 'pass+word2', 'password+3'], ['example.com'], None, None
     ]
 
 
 def test_uri_split_no_username():
     job = jobs.Job()
     assert job.split('ssh+ftp://:password@example.com') == [
-        ['ssh', 'ftp'], None, ['password'], ['example.com'], None
+        ['ssh', 'ftp'], None, ['password'], ['example.com'], None, None
     ]
 
 
 def test_uri_split_no_password():
     job = jobs.Job()
     assert job.split('ssh+ftp://admin@example.com') == [
-        ['ssh', 'ftp'], ['admin'], None, ['example.com'], None
+        ['ssh', 'ftp'], ['admin'], None, ['example.com'], None, None
     ]
 
 
 def test_uri_split_multiple_targets():
     job = jobs.Job()
     assert job.split('ssh+ftp://admin+root+user:password+Passw0rd@example.com+other.example.com') == [
-        ['ssh', 'ftp'], ['admin', 'root', 'user'], ['password', 'Passw0rd'], ['example.com', 'other.example.com'], None
+        ['ssh', 'ftp'], ['admin', 'root', 'user'], ['password', 'Passw0rd'], ['example.com', 'other.example.com'], None, None
     ]
 
 

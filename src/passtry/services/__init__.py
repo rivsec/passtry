@@ -1,4 +1,7 @@
 from .base import Service
-from .ssh import SSH
-from .http import HTTP
-from .ftp import FTP
+from .ssh import Ssh
+from .http import (
+    HttpBasicAuth,
+    HttpsBasicAuth,
+)
+from .ftp import Ftp

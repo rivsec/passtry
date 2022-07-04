@@ -7,7 +7,7 @@ from passtry import (
 )
 
 
-class SSH(services.Service):
+class Ssh(services.Service):
 
     port = 22
     service = 'ssh'

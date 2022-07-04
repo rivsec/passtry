@@ -13,3 +13,13 @@ services:
     ports:
       - "21:21"
       - "50000-50001:50000-50001"
+  nginx-latest:
+    build:
+      context: .
+      dockerfile: ./dockers/nginx-latest.docker
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./dockers/etc/default.conf:/etc/nginx/conf.d/default.conf
+      - ./dockers/etc/certs:/etc/nginx/certs

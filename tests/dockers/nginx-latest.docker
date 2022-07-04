@@ -1,0 +1,12 @@
+FROM nginx:latest
+ENV DEBIAN_FRONTEND noninteractive
+RUN apt-get -qq update \
+    && apt-get -qq --no-install-recommends install apache2-utils \
+    && apt-get -qq clean \
+    && rm -rf /var/lib/apt/lists/*
+RUN htpasswd -c -b /etc/nginx/htpasswd user 'P@55w0rd!'
+RUN htpasswd -b /etc/nginx/htpasswd user2 'P@55w0rd!'
+RUN htpasswd -b /etc/nginx/htpasswd user3 'PassPass'
+RUN mkdir /usr/share/nginx/html/http-basic
+RUN echo '<html><head><title>Test</title></head><body><h1>No Auth</h1></body></html>' > /usr/share/nginx/html/index.html
+RUN echo '<html><head><title>Test</title></head><body><h1>HTTP Basic Auth</h1></body></html>' > /usr/share/nginx/html/http-basic/index.html

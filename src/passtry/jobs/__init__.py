@@ -1,12 +1,14 @@
-import itertools
-import re
-import uuid
 from urllib import parse
-import shlex
+import itertools
+import queue
 import random
+import re
+import shlex
+import sys
 import threading
 import time
-import queue
+import uuid
+import urllib3
 
 from passtry import (
     exceptions,
@@ -22,6 +24,7 @@ TASK_STRUCT = {
     2: 'secrets',
     3: 'hosts',
     4: 'ports',
+    5: 'options',
 }
 TASK_STRUCT_BY_NAME = {val: idx for idx, val in enumerate(TASK_STRUCT.values())}
 THREADS_NUMBER = 8
@@ -89,9 +92,15 @@ class Job:
         self.attempts = Counter()
         self.results = Results()
         self.queue = queue.Queue()
+        # NOTE: Disable `Unverified HTTPS request is being made` warning.
+        # FIXME: Any better place to put this to guarantee execution?
+        urllib3.disable_warnings()
 
     def task_to_dict(self, task):
-        return {TASK_STRUCT[idx]: tsk for idx, tsk in enumerate(task)}
+        try:
+            return {TASK_STRUCT[idx]: tsk for idx, tsk in enumerate(task)}
+        except KeyError:
+            raise exceptions.DataError(f'Task {task} contains invalid number of elements')
 
     def combine(self, *iterables):
         """Provides combinations of values in separate lists
@@ -120,7 +129,12 @@ class Job:
         """Returns URI string containing all information required for connection.
 
         """
-        return '{services}://{usernames}:{secrets}@{hosts}:{ports}'.format(**self.task_to_dict(task))
+        task_dict = self.task_to_dict(task)
+        result = '{services}://{usernames}:{secrets}@{hosts}:{ports}'.format(**task_dict)
+        task_options = task_dict.get('options', None)
+        if task_options:
+            result += ' -- ' + str(task_options)
+        return result
 
     def cleanup(self, param):
         """Splits command line argument separated with `+`.
@@ -131,7 +145,7 @@ class Job:
         return shlex.split(' '.join(SPLIT_REGEX.split(param)[1::2]))
 
     def split(self, uri):
-        """Dissects URI string into components (services[], usernames[], secrets[], targets[], ports[]).
+        """Dissects URI string into components (services[], usernames[], secrets[], targets[], ports[], ?options[]).
 
         """
         parsed = parse.urlparse(uri)
@@ -146,7 +160,19 @@ class Job:
             raise exceptions.ConfigurationError('Port numbers cannot be specified when multiple services are tested within a single URI')
         else:
             uri_ports = [parsed.port] if parsed.port else None
-        return [uri_services, uri_usernames, uri_secrets, uri_targets, uri_ports]
+        uri_options = dict()
+        if parsed.path:
+            uri_options['path'] = parsed.path
+        if parsed.query:
+            uri_options['query'] = parsed.query
+        if parsed.fragment:
+            uri_options['fragment'] = parsed.fragment
+        result = [uri_services, uri_usernames, uri_secrets, uri_targets, uri_ports]
+        if uri_options:
+            result.extend(uri_options)
+        else:
+            result.extend([None])
+        return result
 
     def tasks_clear(self, queue):
         """Removes all items from the Queue to stop workers gracefully.

@@ -88,11 +88,12 @@ def parse_args(args):
     ports_set = read_file(parsed, 'ports_file').union(parsed.ports)
 
     # NOTE: Now generate combinations.
-    tasks = job.combine(services_set, usernames_set, secrets_set, targets_set, ports_set)
+    tasks = job.combine(services_set, usernames_set, secrets_set, targets_set, ports_set, None)
 
     # NOTE: Combine current set of tasks with data from a combo file.
     combo_args = read_combo(parsed, 'combo_file', parsed.combo_delimiter)
-    tasks.extend(combo_args)
+    if combo_args:
+        tasks.extend(combo_args)
 
     # NOTE: If URI was provided, extract the data and use `ports` value for all tasks.
     if parsed.uri:
@@ -113,11 +114,15 @@ def parse_args(args):
             if missing == 'ports':
                 service = first_row[jobs.TASK_STRUCT_BY_NAME['services']]
                 tasks = job.replace(
-                    [[None, None, None, None, services.Service.registry[service].port]],
+                    [[None, None, None, None, services.Service.registry[service].port, None]],
                     tasks
                 )
                 continue
-            return [f'Missing argument `{missing}`!']
+            elif missing == 'options':
+                # NOTE: It is currently not required for all tasks to have `options` defined, saves some memory.
+                pass
+            else:
+                return [f'Missing argument `{missing}`!']
 
     logs.info(f'Executing {len(tasks)} tasks')
     try:

@@ -27,6 +27,7 @@ setuptools.setup(
     python_requires='>=3.10',
     install_requires=[
         'paramiko==2.11.0',
+        'requests==2.28.0',
     ],
     packages=setuptools.find_packages('src'),
     package_dir={'': 'src'},

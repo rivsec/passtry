@@ -6,7 +6,7 @@ from passtry import (
 )
 
 
-class FTP(services.Service):
+class Ftp(services.Service):
 
     port = 21
     service = 'ftp'
