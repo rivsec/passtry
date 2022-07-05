@@ -37,7 +37,7 @@ class Ftp(services.Service):
         except ftplib.error_perm:
             result = False
         # NOTE: Repeating handling `TimeoutError` exception on purpose.
-        except TimeoutError:
+        except (TimeoutError, EOFError):
             logs.logger.debug(f'{cls.__name__} connection failed (timed out?) for {task}')
             raise exceptions.ConnectionFailed
         else:

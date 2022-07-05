@@ -38,31 +38,31 @@ TIME_STATISTICS = 5
 class Counter:
 
     def __init__(self):
-        self.value = 0
-        self.lock = threading.Lock()
+        self._value = 0
+        self._lock = threading.Lock()
 
     def inc(self):
-        with self.lock:
-            self.value += 1
+        with self._lock:
+            self._value += 1
 
     def get(self):
-        with self.lock:
-            return self.value
+        with self._lock:
+            return self._value
 
 
 class Results:
 
     def __init__(self):
-        self.items = list()
-        self.lock = threading.Lock()
+        self._items = list()
+        self._lock = threading.Lock()
 
     def add(self, item):
-        with self.lock:
-            self.items.append(item)
+        with self._lock:
+            self._items.append(item)
 
     def get(self):
-        with self.lock:
-            return self.items
+        with self._lock:
+            return self._items
 
 
 class Job:
@@ -76,6 +76,7 @@ class Job:
             time_randomize=TIME_RANDOMIZE,
             first_match=False,
             watch_failures=True,
+            retry_failed=True,
             enable_statistics=False,
             time_statistics=TIME_STATISTICS
         ):
@@ -86,15 +87,17 @@ class Job:
         self.time_randomize = time_randomize
         self.first_match = first_match
         self.watch_failures = watch_failures
+        self.retry_failed = retry_failed
         self.enable_statistics = enable_statistics
         self.time_statistics = time_statistics
-        self.failures = Counter()
         self.attempts = Counter()
+        self.successful = Counter()
+        self.failed = Counter()
         self.results = Results()
-        self.queue = queue.Queue()
+        self.queue = queue.LifoQueue()
         # NOTE: Disable `Unverified HTTPS request is being made` warning.
         # FIXME: Any better place to put this to guarantee execution?
-        urllib3.disable_warnings()
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
     def task_to_dict(self, task):
         try:
@@ -198,7 +201,7 @@ class Job:
     def stats(self):
         while True:
             time.sleep(self.time_statistics)
-            logs.logger.info(f'Attempts: {self.attempts.get()} | Failed connections: {self.failures.get()} | Matched credentials: {len(self.results.get())}')
+            logs.logger.info(f'Attempts: {self.attempts.get()} | Successful connections: {self.successful.get()} | Failed connections: {self.failed.get()} | Matched credentials: {len(self.results.get())}')
 
     def worker(self):
         """A generic thread worker function.
@@ -212,21 +215,22 @@ class Job:
                 cls = services.Service.registry[task[0]]
             except KeyError:
                 raise exceptions.ConfigurationError(f'Unknown service `{task[0]}`')
+            self.attempts.inc()
             try:
                 result = cls.execute(task, self.connections_timeout)
             except exceptions.ConnectionFailed:
                 logs.logger.debug(f'Connection failed for {task}')
-                self.failures.inc()
+                self.failed.inc()
                 if self.watch_failures:
-                    if self.failures.get() == self.failed_number:
+                    if self.failed.get() == self.failed_number:
                         logs.logger.info(f'Too many failed connections, aborting!')
                         self.tasks_clear(self.queue)
                         continue
-                    else:
-                        logs.logger.debug(f'Putting {task} back to the queue')
-                self.queue.put(task)
+                if self.retry_failed:
+                    logs.logger.debug(f'Putting {task} back to the queue')
+                    self.queue.put(task)
             else:
-                self.attempts.inc()
+                self.successful.inc()
                 logs.logger.debug(f'Connection successful for {task}')
                 if result:
                     logs.logger.debug(f'Validated following credentials: {task}')

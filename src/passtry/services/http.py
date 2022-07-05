@@ -38,7 +38,7 @@ class HttpBasicAuth(HttpMixin, services.Service):
         kwargs = cls.map_kwargs(task)
         url = parse.urlunsplit((cls.scheme, kwargs['netloc'], kwargs['path'], kwargs['query'], kwargs['fragment']))
         try:
-            response = requests.get(url, auth=requests.auth.HTTPBasicAuth(kwargs['user'], kwargs['pass']), verify=False, timeout=timeout)
+            response = requests.get(url, auth=requests.auth.HTTPBasicAuth(kwargs['user'], kwargs['pass']), verify=False, allow_redirects=False, timeout=timeout)
         except requests.exceptions.Timeout:
             logs.logger.debug(f'{cls.__name__} connection failed (timed out?) for {task}')
             raise exceptions.ConnectionFailed

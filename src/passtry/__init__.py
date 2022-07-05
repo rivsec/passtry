@@ -59,7 +59,8 @@ def parse_args(args):
     parser.add_argument('--list-services', action='store_true', help='Show available services')
     parser.add_argument('-eF', '--enable-first-match', default=False, action='store_true', help='Abort processing on first match')
     parser.add_argument('-dF', '--disable-failures', default=True, action='store_false', help='Disable counter for failed connections')
-    parser.add_argument('-eS', '--enable-statistics', default=False, action='store_true', help='Show statistics (attempts, failures, matches)')
+    parser.add_argument('-dR', '--disable-retry', default=True, action='store_false', help='Disable retry for failed connections')
+    parser.add_argument('-eS', '--enable-statistics', default=False, action='store_true', help='Show statistics (attempts, successful/failed connections, matches)')
     parser.add_argument('-tS', '--time-statistics', type=int, default=jobs.TIME_STATISTICS, help='Statistics interval')
     verbosity = parser.add_mutually_exclusive_group()
     verbosity.add_argument('-d', '--debug', action='store_const', dest='loglevel', const=logs.logging.DEBUG, default=logs.logging.INFO, help='Enable debug mode (verbose output)')
@@ -79,6 +80,7 @@ def parse_args(args):
         time_randomize=parsed.time_randomize,
         first_match=parsed.enable_first_match,
         watch_failures=parsed.disable_failures,
+        retry_failed=parsed.disable_retry,
         enable_statistics=parsed.enable_statistics,
         time_statistics=parsed.time_statistics
     )

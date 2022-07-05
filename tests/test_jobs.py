@@ -126,56 +126,78 @@ def test_uri_split_multiple_targets():
 def test_max_failed_no_results(ssh_service):
     ssh_host, ssh_port = ssh_service
     tasks = [
+        ('ssh', 'user', 'P@55w0rd!', ssh_host, ssh_port),
+        ('ssh', 'user', 'Password', ssh_host, 9994),
+        ('ssh', 'user', 'Password', ssh_host, 9995),
+        ('ssh', 'user', 'Password', ssh_host, ssh_port),
         ('ssh', 'user', 'Password', ssh_host, 9991),
         ('ssh', 'user', 'Password', ssh_host, 9992),
         ('ssh', 'user', 'Password', ssh_host, 9993),
-        ('ssh', 'user', 'Password', ssh_host, ssh_port),
-        ('ssh', 'user', 'Password', ssh_host, 9994),
-        ('ssh', 'user', 'Password', ssh_host, 9995),
-        ('ssh', 'user', 'P@55w0rd!', ssh_host, ssh_port),
     ]
     # NOTE: Reducing number of threads to get correct number of failures (sequential execution).
     job = jobs.Job(threads_number=1, failed_number=3)
     job.start(tasks)
-    assert job.failures.get() == 3
-    assert job.attempts.get() == 0
+    assert job.failed.get() == 3
+    assert job.successful.get() == 0
     assert job.results.get() == list()
 
 
 def test_max_failed_increased_results(ssh_service):
     ssh_host, ssh_port = ssh_service
     tasks = [
-        ('ssh', 'user', 'Password', ssh_host, 9991),
-        ('ssh', 'user', 'Password', ssh_host, ssh_port),
-        ('ssh', 'user', 'Password', ssh_host, 9992),
         ('ssh', 'user', 'P@55w0rd!', ssh_host, ssh_port),
+        ('ssh', 'user', 'Password', ssh_host, 9992),
+        ('ssh', 'user', 'Password', ssh_host, ssh_port),
+        ('ssh', 'user', 'Password', ssh_host, 9991),
     ]
     # NOTE: Reducing number of threads to get correct number of failures (sequential execution).
     # NOTE: Must first match so the task put back to the queue will not increase the failures value.
-    job = jobs.Job(threads_number=1, failed_number=3, first_match=True)
+    job = jobs.Job(threads_number=1, failed_number=3, retry_failed=False, first_match=True)
     job.start(tasks)
-    assert job.failures.get() == 2
-    assert job.attempts.get() == 2
+    assert job.failed.get() == 2
+    assert job.successful.get() == 2
     assert job.results.get() == [('ssh', 'user', 'P@55w0rd!', '127.0.0.1', 22)]
 
 
-def test_max_failed_disable_failures_first_match(ssh_service):
+def test_max_failed_disable_failures_first_match_no_retry(ssh_service):
     ssh_host, ssh_port = ssh_service
     tasks = [
         ('ssh', 'user', 'Password', ssh_host, 9991),
         ('ssh', 'user', 'Password', ssh_host, 9992),
+        ('ssh', 'user', 'P@55w0rd!', ssh_host, ssh_port),
         ('ssh', 'user', 'Password', ssh_host, 9993),
         ('ssh', 'user', 'Password', ssh_host, 9994),
         ('ssh', 'user', 'Password', ssh_host, 9995),
-        ('ssh', 'user', 'P@55w0rd!', ssh_host, ssh_port),
         ('ssh', 'user', 'Password', ssh_host, 9996),
         ('ssh', 'user', 'Password', ssh_host, 9997),
     ]
     # NOTE: Reducing number of threads to get correct number of failures (sequential execution).
-    job = jobs.Job(threads_number=1, failed_number=3, watch_failures=False, first_match=True)
+    job = jobs.Job(threads_number=1, failed_number=3, retry_failed=False, watch_failures=False, first_match=True)
     job.start(tasks)
-    assert job.failures.get() == 5
-    assert job.attempts.get() == 1
+    assert job.attempts.get() == 6
+    assert job.failed.get() == 5
+    assert job.successful.get() == 1
+    assert job.results.get() == [('ssh', 'user', 'P@55w0rd!', '127.0.0.1', 22)]
+
+
+def test_disable_retry(ssh_service):
+    ssh_host, ssh_port = ssh_service
+    tasks = [
+        ('ssh', 'user', 'Password', ssh_host, 9991),
+        ('ssh', 'user', 'Password', ssh_host, 9992),
+        ('ssh', 'user', 'P@55w0rd!', ssh_host, ssh_port),
+        ('ssh', 'user', 'Password', ssh_host, 9993),
+        ('ssh', 'user', 'Password', ssh_host, 9994),
+        ('ssh', 'user', 'Password', ssh_host, 9995),
+        ('ssh', 'user', 'Password', ssh_host, 9996),
+        ('ssh', 'user', 'Password', ssh_host, 9997),
+    ]
+    # NOTE: Reducing number of threads to get correct number of failures (sequential execution).
+    job = jobs.Job(threads_number=1, retry_failed=False, failed_number=20, watch_failures=True, first_match=True)
+    job.start(tasks)
+    assert job.attempts.get() == 6
+    assert job.failed.get() == 5
+    assert job.successful.get() == 1
     assert job.results.get() == [('ssh', 'user', 'P@55w0rd!', '127.0.0.1', 22)]
 
 
@@ -190,5 +212,5 @@ def test_first_match(ssh_service):
     ]
     job = jobs.Job(first_match=True)
     job.start(tasks)
-    assert job.attempts.get() == 1
+    assert job.successful.get() == 1
     assert job.results.get() == [('ssh', 'user', 'P@55w0rd!', '127.0.0.1', 22)]
