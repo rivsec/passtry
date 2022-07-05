@@ -33,7 +33,7 @@ def test_http_basic(http_service):
         ('http-basic', 'user', 'P@55w0rd!', service_host, service_port, {'path': '/http-basic/'}),
     ]
     job.start(tasks)
-    assert job.output() == [f'http-basic://user:P@55w0rd!@{service_host}:{service_port} -- {{\'path\': \'/http-basic/\'}}']
+    assert job.output() == [f"http-basic://user:P@55w0rd!@{service_host}:{service_port} -- {{'path': '/http-basic/'}}"]
 
 
 def test_https_basic(https_service):
@@ -44,4 +44,4 @@ def test_https_basic(https_service):
         ('https-basic', 'user', 'P@55w0rd!', service_host, service_port, {'path': '/http-basic/'}),
     ]
     job.start(tasks)
-    assert job.output() == [f'https-basic://user:P@55w0rd!@{service_host}:{service_port} -- {{\'path\': \'/http-basic/\'}}']
+    assert job.output() == [f"https-basic://user:P@55w0rd!@{service_host}:{service_port} -- {{'path': '/http-basic/'}}"]

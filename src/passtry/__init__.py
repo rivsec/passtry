@@ -34,6 +34,7 @@ def read_combo(parsed, file_attr, delimiter=None):
 
 def parse_args(args):
     parser = argparse.ArgumentParser(
+        prog='passtry',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.print_usage = parser.print_help
@@ -90,11 +91,6 @@ def parse_args(args):
     # NOTE: Now generate combinations.
     tasks = job.combine(services_set, usernames_set, secrets_set, targets_set, ports_set, None)
 
-    # NOTE: Combine current set of tasks with data from a combo file.
-    combo_args = read_combo(parsed, 'combo_file', parsed.combo_delimiter)
-    if combo_args:
-        tasks.extend(combo_args)
-
     # NOTE: If URI was provided, extract the data and use `ports` value for all tasks.
     if parsed.uri:
         # NOTE: Assuming URI argument creates a single row.
@@ -105,24 +101,26 @@ def parse_args(args):
         if uri_ports is None:
             normal_uri[0][jobs.TASK_STRUCT_BY_NAME['ports']] = services.Service.registry[uri_services].port
         tasks = job.replace(normal_uri, tasks)
-    first_row = tasks[0]
 
     # NOTE: In case URI was not provided and `ports` still missing, use `services` for reference.
-    for idx, val in enumerate(first_row):
-        if val is None:
-            missing = jobs.TASK_STRUCT[idx]
-            if missing == 'ports':
-                service = first_row[jobs.TASK_STRUCT_BY_NAME['services']]
-                tasks = job.replace(
-                    [[None, None, None, None, services.Service.registry[service].port, None]],
-                    tasks
-                )
-                continue
-            elif missing == 'options':
-                # NOTE: It is currently not required for all tasks to have `options` defined, saves some memory.
-                pass
-            else:
-                return [f'Missing argument `{missing}`!']
+    for task in tasks:
+        port = task[jobs.TASK_STRUCT_BY_NAME['ports']]
+        service = task[jobs.TASK_STRUCT_BY_NAME['services']]
+        if port is None and service:
+            task[jobs.TASK_STRUCT_BY_NAME['ports']] = services.Service.registry[service].port
+
+    # NOTE: Combine current set of tasks with combo data.
+    combo_args = read_combo(parsed, 'combo_file', parsed.combo_delimiter)
+    if combo_args:
+        for task in tasks:
+            for combo in combo_args:
+                # FIXME: Not necesserily the most optimal way: for each existing task replace
+                #        credentials and add a new one if doesn't exist.
+                combo_task = task.copy()
+                combo_task[jobs.TASK_STRUCT_BY_NAME['usernames']] = combo[jobs.TASK_STRUCT_BY_NAME['usernames']]
+                combo_task[jobs.TASK_STRUCT_BY_NAME['secrets']] = combo[jobs.TASK_STRUCT_BY_NAME['secrets']]
+                if not tasks.count(combo_task):
+                    tasks.append(combo_task)
 
     logs.info(f'Executing {len(tasks)} tasks')
     try:

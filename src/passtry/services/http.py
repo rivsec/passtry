@@ -3,6 +3,7 @@ from urllib import parse
 import requests
 
 from passtry import (
+    exceptions,
     logs,
     services,
 )
@@ -19,9 +20,9 @@ class HttpMixin:
             'port': int(task[4]),
         }
         options = task[5]
-        mapping['path'] = options.get('path', '')
-        mapping['query'] = options.get('query', '')
-        mapping['fragment'] = options.get('fragment', '')
+        mapping['path'] = options.get('path', '') if options else ''
+        mapping['query'] = options.get('query', '') if options else ''
+        mapping['fragment'] = options.get('fragment', '') if options else ''
         return mapping
 
 
@@ -36,7 +37,11 @@ class HttpBasicAuth(HttpMixin, services.Service):
         logs.debug(f'{cls.__name__} is executing {task}')
         kwargs = cls.map_kwargs(task)
         url = parse.urlunsplit((cls.scheme, kwargs['netloc'], kwargs['path'], kwargs['query'], kwargs['fragment']))
-        response = requests.get(url, auth=requests.auth.HTTPBasicAuth(kwargs['user'], kwargs['pass']), verify=False)
+        try:
+            response = requests.get(url, auth=requests.auth.HTTPBasicAuth(kwargs['user'], kwargs['pass']), verify=False, timeout=timeout)
+        except requests.exceptions.Timeout:
+            logs.debug(f'{cls.__name__} connection failed (timed out?) for {task}')
+            raise exceptions.ConnectionFailed
         if response.status_code == 200:
             return True
         else:

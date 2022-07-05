@@ -111,18 +111,30 @@ class Job:
         return [list(params) for params in itertools.product(*iters)]
 
     def replace(self, primary, secondary):
-        """Overwrites elements in the second list with the contents
-        of the first one and checks for duplicates before adding.
+        """Overwrites elements in the second list with the contents of the first
+        one's for each service type and checks for duplicates before adding.
 
         """
-        mapping = primary[0]
+        by_services = dict()
+        for task in primary:
+            service = task[TASK_STRUCT_BY_NAME['services']]
+            if service not in by_services:
+                by_services[service] = task
         result = list()
-        for ele in secondary:
-            for idx, _ in enumerate(ele):
-                if mapping[idx]:
-                    ele[idx] = mapping[idx]
-            if not result.count(ele):
-                result.append(ele)
+        for mapping in by_services.values():
+            for ele in secondary:
+                # NOTE: If at this point `services` is None it should be safe to take anything
+                #       from the primary list (like 1st element) and use it to fill the rest.
+                if ele[TASK_STRUCT_BY_NAME['services']] == mapping[TASK_STRUCT_BY_NAME['services']] or ele[TASK_STRUCT_BY_NAME['services']] is None:
+                    for idx, _ in enumerate(ele):
+                        if mapping[idx]:
+                            ele[idx] = mapping[idx]
+                # NOTE: In case the `hosts` portion is empty, fill it with whatever comes
+                #       in primary (URI precedes).
+                elif ele[TASK_STRUCT_BY_NAME['hosts']] is None:
+                    ele[TASK_STRUCT_BY_NAME['hosts']] = primary[0][TASK_STRUCT_BY_NAME['hosts']]
+                if not result.count(ele):
+                    result.append(ele)
         return result
 
     def prettify(self, task):
@@ -169,9 +181,9 @@ class Job:
             uri_options['fragment'] = parsed.fragment
         result = [uri_services, uri_usernames, uri_secrets, uri_targets, uri_ports]
         if uri_options:
-            result.extend(uri_options)
+            result.append([uri_options])
         else:
-            result.extend([None])
+            result.append(None)
         return result
 
     def tasks_clear(self, queue):

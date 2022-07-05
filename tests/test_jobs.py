@@ -97,8 +97,8 @@ def test_uri_split_multiple_services():
 
 def test_uri_split_plus_in_secrets():
     job = jobs.Job()
-    result = job.split('ssh://admin:password+\'pass+word2\'+"password+3"@example.com')
-    assert job.split('ssh://admin:password+\'pass+word2\'+"password+3"@example.com') == [
+    result = job.split('ssh://admin:password+"pass+word2"+"password+3"@example.com')
+    assert job.split('ssh://admin:password+"pass+word2"+"password+3"@example.com') == [
         ['ssh'], ['admin'], ['password', 'pass+word2', 'password+3'], ['example.com'], None, None
     ]
 
