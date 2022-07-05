@@ -2,7 +2,6 @@ import pytest
 
 from passtry import (
     exceptions,
-    logs,
     jobs,
 )
 

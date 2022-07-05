@@ -1,6 +1,3 @@
-from passtry import logs
-
-
 class Service:
 
     port = None

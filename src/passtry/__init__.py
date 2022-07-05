@@ -61,14 +61,16 @@ def parse_args(args):
     parser.add_argument('-dF', '--disable-failures', default=True, action='store_false', help='Disable counter for failed connections')
     parser.add_argument('-eS', '--enable-statistics', default=False, action='store_true', help='Show statistics (attempts, failures, matches)')
     parser.add_argument('-tS', '--time-statistics', type=int, default=jobs.TIME_STATISTICS, help='Statistics interval')
-    parser.add_argument('-d', '--debug', action='store_const', dest='loglevel', const=logs.logging.DEBUG, default=logs.logging.INFO, help='Enable debug mode (verbose output)')
+    verbosity = parser.add_mutually_exclusive_group()
+    verbosity.add_argument('-d', '--debug', action='store_const', dest='loglevel', const=logs.logging.DEBUG, default=logs.logging.INFO, help='Enable debug mode (verbose output)')
+    verbosity.add_argument('-q', '--quiet', action='store_const', dest='loglevel', const=logs.logging.NOTSET, default=logs.logging.INFO, help='Enable quiet mode')
     parsed = parser.parse_args(args)
     logs.init(parsed.loglevel)
     if parsed.list_services:
         print('Services: ' + ', '.join(sorted(services.Service.registry.keys())))
         sys.exit(0)
 
-    logs.info('Preparing...')
+    logs.logger.info('Preparing...')
     job = jobs.Job(
         threads_number=parsed.threads_number,
         failed_number=parsed.failed_number,
@@ -122,11 +124,11 @@ def parse_args(args):
                 if not tasks.count(combo_task):
                     tasks.append(combo_task)
 
-    logs.info(f'Executing {len(tasks)} tasks')
+    logs.logger.info(f'Executing {len(tasks)} tasks')
     try:
         job.start(tasks)
     except KeyboardInterrupt:
-        logs.info(f'Exiting')
+        logs.logger.info(f'Exiting')
     return job.output()
 
 
@@ -135,10 +137,8 @@ def main():
         results = parse_args(sys.argv[1:])
     except (exceptions.ConfigurationError, exceptions.DataError) as exc:
         results = [exc.args[0]]
-    if results:
-        logs.info('Discovered the following credentials:\n' + '\n'.join(results))
-    else:
-        logs.info('No credentials discovered')
+    if not results:
+        logs.logger.info('No credentials discovered')
 
 
 if __name__ == '__main__':

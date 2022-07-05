@@ -198,7 +198,7 @@ class Job:
     def stats(self):
         while True:
             time.sleep(self.time_statistics)
-            logs.info(f'Attempts: {self.attempts.get()} | Failed connections: {self.failures.get()} | Matched credentials: {len(self.results.get())}')
+            logs.logger.info(f'Attempts: {self.attempts.get()} | Failed connections: {self.failures.get()} | Matched credentials: {len(self.results.get())}')
 
     def worker(self):
         """A generic thread worker function.
@@ -215,24 +215,26 @@ class Job:
             try:
                 result = cls.execute(task, self.connections_timeout)
             except exceptions.ConnectionFailed:
-                logs.debug(f'Connection failed for {task}')
+                logs.logger.debug(f'Connection failed for {task}')
                 self.failures.inc()
                 if self.watch_failures:
                     if self.failures.get() == self.failed_number:
-                        logs.info(f'Too many failed connections, aborting!')
+                        logs.logger.info(f'Too many failed connections, aborting!')
                         self.tasks_clear(self.queue)
                         continue
                     else:
-                        logs.debug(f'Putting {task} back to the queue')
+                        logs.logger.debug(f'Putting {task} back to the queue')
                 self.queue.put(task)
             else:
                 self.attempts.inc()
+                logs.logger.debug(f'Connection successful for {task}')
                 if result:
-                    logs.debug(f'Connection successful for {task}')
+                    logs.logger.debug(f'Validated following credentials: {task}')
+                    print(self.prettify(task))
                     self.results.add(task)
                     # NOTE: Finish work if abort on first match is enabled.
                     if self.first_match:
-                        logs.info(f'Found a first match, done!')
+                        logs.logger.info(f'Found a first match, done!')
                         self.tasks_clear(self.queue)
             wait_time = self.time_wait
             if self.time_randomize:
