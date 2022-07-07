@@ -12,24 +12,7 @@ from passtry import (
 class ArgSplitAction(argparse.Action):
 
     def __call__(self, parser, namespace, values, option_string):
-        setattr(namespace, self.dest, set(values.split('+')))
-
-
-def read_file(parsed, file_attr):
-    fil = getattr(parsed, file_attr, tuple())
-    return {line.strip() for line in fil}
-
-
-def read_combo(parsed, file_attr, delimiter=None):
-    fil = getattr(parsed, file_attr, tuple())
-    result = list()
-    try:
-        for line in fil:
-            username, secret = line.strip().split(delimiter)
-            result.append([None, username, secret, None, None])
-    except ValueError:
-        raise exceptions.DataError('Error occured while processing combo file')
-    return result
+        setattr(namespace, self.dest, values.split(','))
 
 
 def parse_args(args):
@@ -38,24 +21,22 @@ def parse_args(args):
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.print_usage = parser.print_help
-    parser.add_argument('-s', '--services', action=ArgSplitAction, default=set(), help='Services (`+` separated)')
-    parser.add_argument('-sf', '--services-file', type=argparse.FileType('r'), default=argparse.SUPPRESS, help='Services file')
-    parser.add_argument('-U', '--usernames', action=ArgSplitAction, default=set(), help='Usernames (`+` separated)')
-    parser.add_argument('-Uf', '--usernames-file', type=argparse.FileType('r'), default=argparse.SUPPRESS, help='Usernames file')
-    parser.add_argument('-S', '--secrets', action=ArgSplitAction, default=set(), help='Secrets (`+` separated)')
-    parser.add_argument('-Sf', '--secrets-file', type=argparse.FileType('r'), default=argparse.SUPPRESS, help='Secrets file')
-    parser.add_argument('-Cf', '--combo-file', type=argparse.FileType('r'), default=argparse.SUPPRESS, help='Combo file')
+    parser.add_argument('-s', '--services', action=ArgSplitAction, default=list(), help='Services (`,` separated, e.g. `ssh` or `ssh:2222`)')
+    parser.add_argument('-sf', '--services-file', type=argparse.FileType('r'), default=list(), help='Services file')
+    parser.add_argument('-U', '--usernames', action=ArgSplitAction, default=list(), help='Usernames (`,` separated)')
+    parser.add_argument('-Uf', '--usernames-file', type=argparse.FileType('r'), default=list(), help='Usernames file')
+    parser.add_argument('-S', '--secrets', action=ArgSplitAction, default=list(), help='Secrets (`,` separated)')
+    parser.add_argument('-Sf', '--secrets-file', type=argparse.FileType('r'), default=list(), help='Secrets file')
+    parser.add_argument('-Cf', '--combo-file', type=argparse.FileType('r'), default=list(), help='Combo file')
     parser.add_argument('-Cd', '--combo-delimiter', default=':', help='Combo file delimiter')
-    parser.add_argument('-t', '--targets', action=ArgSplitAction, default=set(), help='Targets (`+` separated)')
-    parser.add_argument('-tf', '--targets-file', type=argparse.FileType('r'), default=argparse.SUPPRESS, help='Targets file')
-    parser.add_argument('-p', '--ports', action=ArgSplitAction, default=set(), help='Ports (`+` separated)')
-    parser.add_argument('-pf', '--ports-file', type=argparse.FileType('r'), default=argparse.SUPPRESS, help='Ports file')
+    parser.add_argument('-t', '--targets', action=ArgSplitAction, default=list(), help='Targets (`,` separated)')
+    parser.add_argument('-tf', '--targets-file', type=argparse.FileType('r'), default=list(), help='Targets file')
+    parser.add_argument('-o', '--options', action=ArgSplitAction, default=dict(), help='Options (`,` separated, e.g. `http-basic:path=/secret-path/`)')
     parser.add_argument('-tN', '--threads-number', type=int, default=jobs.THREADS_NUMBER, help='Number of worker threads')
     parser.add_argument('-fN', '--failed-number', type=int, default=jobs.FAILED_NUMBER, help='Maximum number of failed connections')
     parser.add_argument('-cT', '--connections-timeout', type=int, default=jobs.CONNECTIONS_TIMEOUT, help='Connections timeout')
     parser.add_argument('-tW', '--time-wait', type=float, default=jobs.TIME_WAIT, help='Time to wait between connections')
     parser.add_argument('-tR', '--time-randomize', type=int, default=jobs.TIME_RANDOMIZE, help='Randomized time in seconds to add to wait time (`--time-wait`)')
-    parser.add_argument('-u', '--uri', help='URI connection string (takes precedence over other arguments)')
     parser.add_argument('--list-services', action='store_true', help='Show available services')
     parser.add_argument('-eF', '--enable-first-match', default=False, action='store_true', help='Abort processing on first match')
     parser.add_argument('-dF', '--disable-failures', default=True, action='store_false', help='Disable counter for failed connections')
@@ -85,62 +66,66 @@ def parse_args(args):
         time_statistics=parsed.time_statistics
     )
 
-    # NOTE: Read data from files.
-    services_set = read_file(parsed, 'services_file').union(parsed.services)
-    usernames_set = read_file(parsed, 'usernames_file').union(parsed.usernames)
-    secrets_set = read_file(parsed, 'secrets_file').union(parsed.secrets)
-    targets_set = read_file(parsed, 'targets_file').union(parsed.targets)
-    ports_set = read_file(parsed, 'ports_file').union(parsed.ports)
+    data_services = list()
+    data_usernames = list()
+    data_secrets = list()
+    data_targets = list()
+    data_options = dict()
 
-    # NOTE: Now generate combinations.
-    tasks = job.combine(services_set, usernames_set, secrets_set, targets_set, ports_set, None)
+    # NOTE: Read data from files and CLI arguments
+    logs.logger.debug('Reading data from files and CLI arguments')
 
-    # NOTE: If URI was provided, extract the data and use `ports` value for all tasks.
-    if parsed.uri:
-        # NOTE: Assuming URI argument creates a single row.
-        normal_uri = job.combine(*job.split(parsed.uri))
-        # NOTE: If URI was defined and ports is None use the URI schema value for given class.
-        uri_ports = normal_uri[0][jobs.TASK_STRUCT_BY_NAME['ports']]
-        uri_services = normal_uri[0][jobs.TASK_STRUCT_BY_NAME['services']]
-        if uri_ports is None:
-            normal_uri[0][jobs.TASK_STRUCT_BY_NAME['ports']] = services.Service.registry[uri_services].port
-        tasks = job.replace(normal_uri, tasks)
+    logs.logger.debug('Reading `services`')
+    data_services.extend(job.read_file(parsed.services_file))
+    data_services.extend(ele for ele in parsed.services if ele not in data_services)
 
-    # NOTE: In case URI was not provided and `ports` still missing, use `services` for reference.
-    for task in tasks:
-        port = task[jobs.TASK_STRUCT_BY_NAME['ports']]
-        service = task[jobs.TASK_STRUCT_BY_NAME['services']]
-        if port is None and service:
-            task[jobs.TASK_STRUCT_BY_NAME['ports']] = services.Service.registry[service].port
+    logs.logger.debug('Reading `usernames`')
+    data_usernames.extend(job.read_file(parsed.usernames_file))
+    data_usernames.extend(ele for ele in parsed.usernames if ele not in data_usernames)
 
-    # NOTE: Combine current set of tasks with combo data.
-    combo_args = read_combo(parsed, 'combo_file', parsed.combo_delimiter)
-    if combo_args:
-        for task in tasks:
-            for combo in combo_args:
-                # FIXME: Not necesserily the most optimal way: for each existing task replace
-                #        credentials and add a new one if doesn't exist.
-                combo_task = task.copy()
-                combo_task[jobs.TASK_STRUCT_BY_NAME['usernames']] = combo[jobs.TASK_STRUCT_BY_NAME['usernames']]
-                combo_task[jobs.TASK_STRUCT_BY_NAME['secrets']] = combo[jobs.TASK_STRUCT_BY_NAME['secrets']]
-                if not tasks.count(combo_task):
-                    tasks.append(combo_task)
+    logs.logger.debug('Reading `secrets`')
+    data_secrets.extend(job.read_file(parsed.secrets_file))
+    data_secrets.extend(ele for ele in parsed.secrets if ele not in data_secrets)
 
-    logs.logger.info(f'Executing {len(tasks)} tasks')
-    try:
-        job.start(tasks)
-    except KeyboardInterrupt:
-        logs.logger.info(f'Exiting')
+    logs.logger.debug('Reading `targets`')
+    data_targets.extend(job.read_file(parsed.targets_file))
+    data_targets.extend(ele for ele in parsed.targets if ele not in data_targets)
+
+    logs.logger.debug('Reading combo file if present')
+    data_combos = job.read_combo(parsed.combo_file, parsed.combo_delimiter)
+
+    if not data_services:
+        raise exceptions.DataError('Missing `services` data! (-s/-sf)')
+
+    if not data_usernames and data_secrets:
+        raise exceptions.DataError('Missing `usernames` data! (-U/-Uf)')
+
+    if not data_secrets and data_usernames:
+        raise exceptions.DataError('Missing `secrets` data! (-S/-Sf)')
+
+    if not data_targets:
+        raise exceptions.DataError('Missing `targets` data! (-t/-tf)')
+
+    for opt in parsed.options:
+        service, params = opt.split(':')
+        attr, value = params.split('=')
+        data_options[service] = {attr: value}
+
+    job.start(data_services, data_targets, data_usernames, data_secrets, data_options, data_combos)
     return job.output()
 
 
 def main():
+    results = None
     try:
         results = parse_args(sys.argv[1:])
     except (exceptions.ConfigurationError, exceptions.DataError) as exc:
-        results = [exc.args[0]]
-    if not results:
-        logs.logger.info('No credentials discovered')
+        logs.logger.error(exc)
+    except KeyboardInterrupt:
+        logs.logger.info(f'Exiting')
+    else:
+        if not results:
+            logs.logger.info('No credentials discovered')
 
 
 if __name__ == '__main__':

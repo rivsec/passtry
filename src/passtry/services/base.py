@@ -1,3 +1,6 @@
+__all__ = ['Service']
+
+
 class Service:
 
     port = None
@@ -11,3 +14,7 @@ class Service:
     @classmethod
     def execute(cls, task, timeout):
         raise NotImplementedError
+
+    @classmethod
+    def prettify(cls, task):
+        return '{services}://{usernames}:{secrets}@{targets}:{ports}'.format(**task)

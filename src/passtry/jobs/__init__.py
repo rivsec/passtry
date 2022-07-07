@@ -2,32 +2,26 @@ from urllib import parse
 import itertools
 import queue
 import random
-import re
-import shlex
-import sys
 import threading
 import time
-import uuid
 import urllib3
 
 from passtry import (
     exceptions,
     logs,
-    services,
 )
+from passtry import services as services_module
 
 
-SPLIT_REGEX = re.compile(r"""((?:[^+"']|"[^"]*"|'[^']*')+)""")
 TASK_STRUCT = {
     0: 'services',
-    1: 'usernames',
-    2: 'secrets',
-    3: 'hosts',
-    4: 'ports',
+    1: 'ports',
+    2: 'targets',
+    3: 'usernames',
+    4: 'secrets',
     5: 'options',
 }
-TASK_STRUCT_BY_NAME = {val: idx for idx, val in enumerate(TASK_STRUCT.values())}
-THREADS_NUMBER = 8
+THREADS_NUMBER = 10
 FAILED_NUMBER = 10
 CONNECTIONS_TIMEOUT = 10
 TIME_WAIT = 0.1
@@ -94,7 +88,7 @@ class Job:
         self.successful = Counter()
         self.failed = Counter()
         self.results = Results()
-        self.queue = queue.LifoQueue()
+        self.queue = queue.Queue()
         # NOTE: Disable `Unverified HTTPS request is being made` warning.
         # FIXME: Any better place to put this to guarantee execution?
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -105,39 +99,23 @@ class Job:
         except KeyError:
             raise exceptions.DataError(f'Task {task} contains invalid number of elements')
 
-    def combine(self, *iterables):
-        """Provides combinations of values in separate lists
+    def read_file(self, file_obj):
+        if file_obj is None:
+            result = list([None])
+        else:
+            result = list()
+            for line in file_obj:
+                result.append(line.rstrip('\n'))
+        return result
 
-        """
-        # NOTE: Replace empty set() with [None] for common "interface"
-        iters = [params if params else [None] for params in iterables]
-        return [list(params) for params in itertools.product(*iters)]
-
-    def replace(self, primary, secondary):
-        """Overwrites elements in the second list with the contents of the first
-        one's for each service type and checks for duplicates before adding.
-
-        """
-        by_services = dict()
-        for task in primary:
-            service = task[TASK_STRUCT_BY_NAME['services']]
-            if service not in by_services:
-                by_services[service] = task
+    def read_combo(self, file_obj, delimiter=None):
         result = list()
-        for mapping in by_services.values():
-            for ele in secondary:
-                # NOTE: If at this point `services` is None it should be safe to take anything
-                #       from the primary list (like 1st element) and use it to fill the rest.
-                if ele[TASK_STRUCT_BY_NAME['services']] == mapping[TASK_STRUCT_BY_NAME['services']] or ele[TASK_STRUCT_BY_NAME['services']] is None:
-                    for idx, _ in enumerate(ele):
-                        if mapping[idx]:
-                            ele[idx] = mapping[idx]
-                # NOTE: In case the `hosts` portion is empty, fill it with whatever comes
-                #       in primary (URI precedes).
-                elif ele[TASK_STRUCT_BY_NAME['hosts']] is None:
-                    ele[TASK_STRUCT_BY_NAME['hosts']] = primary[0][TASK_STRUCT_BY_NAME['hosts']]
-                if not result.count(ele):
-                    result.append(ele)
+        if file_obj is not None:
+            try:
+                for line in file_obj:
+                    result.append(tuple(line.strip().split(delimiter)))
+            except ValueError:
+                raise exceptions.DataError('Error occured while processing combo file')
         return result
 
     def prettify(self, task):
@@ -145,49 +123,8 @@ class Job:
 
         """
         task_dict = self.task_to_dict(task)
-        result = '{services}://{usernames}:{secrets}@{hosts}:{ports}'.format(**task_dict)
-        task_options = task_dict.get('options', None)
-        if task_options:
-            result += ' -- ' + str(task_options)
-        return result
-
-    def cleanup(self, param):
-        """Splits command line argument separated with `+`.
-
-        """
-        if param is None or param == '':
-            return
-        return shlex.split(' '.join(SPLIT_REGEX.split(param)[1::2]))
-
-    def split(self, uri):
-        """Dissects URI string into components (services[], usernames[], secrets[], targets[], ports[], ?options[]).
-
-        """
-        parsed = parse.urlparse(uri)
-        uri_services = self.cleanup(parsed.scheme)
-        invalid = [srv for srv in uri_services if srv not in services.Service.registry]
-        if any(invalid):
-            raise exceptions.ConfigurationError('Invalid service')
-        uri_usernames = self.cleanup(parsed.username)
-        uri_secrets = self.cleanup(parsed.password)
-        uri_targets = self.cleanup(parsed.hostname)
-        if parsed.port and len(uri_services) > 1:
-            raise exceptions.ConfigurationError('Port numbers cannot be specified when multiple services are tested within a single URI')
-        else:
-            uri_ports = [parsed.port] if parsed.port else None
-        uri_options = dict()
-        if parsed.path:
-            uri_options['path'] = parsed.path
-        if parsed.query:
-            uri_options['query'] = parsed.query
-        if parsed.fragment:
-            uri_options['fragment'] = parsed.fragment
-        result = [uri_services, uri_usernames, uri_secrets, uri_targets, uri_ports]
-        if uri_options:
-            result.append([uri_options])
-        else:
-            result.append(None)
-        return result
+        prettify_method = services_module.Service.registry[task_dict['services']].prettify
+        return prettify_method(task_dict)
 
     def tasks_clear(self, queue):
         """Removes all items from the Queue to stop workers gracefully.
@@ -198,12 +135,17 @@ class Job:
             queue.unfinished_tasks = 0
             queue.all_tasks_done.notify_all()
 
-    def stats(self):
+    def worker_stats(self):
         while True:
             time.sleep(self.time_statistics)
-            logs.logger.info(f'Attempts: {self.attempts.get()} | Successful connections: {self.successful.get()} | Failed connections: {self.failed.get()} | Matched credentials: {len(self.results.get())}')
+            logs.logger.info(
+                f'Attempts: {self.attempts.get()} | '
+                f'Successful connections: {self.successful.get()} | '
+                f'Failed connections: {self.failed.get()} | '
+                f'Matched credentials: {len(self.results.get())}'
+            )
 
-    def worker(self):
+    def worker_tasks(self):
         """A generic thread worker function.
 
         """
@@ -212,7 +154,7 @@ class Job:
             if task is None:
                 break
             try:
-                cls = services.Service.registry[task[0]]
+                cls = services_module.Service.registry[task[0]]
             except KeyError:
                 raise exceptions.ConfigurationError(f'Unknown service `{task[0]}`')
             self.attempts.inc()
@@ -252,16 +194,47 @@ class Job:
         """Returns list of URIs with confirmed credentials.
 
         """
+        logs.logger.debug('output()')
         return [self.prettify(result) for result in self.results.get() if result]
 
-    def start(self, tasks):
+    def start(self, services, targets, usernames=None, secrets=None, options=None, combos=None):
         """Main entry point.
 
         """
+        if options is None:
+            options = dict()
+
+        services = list(services)
+
+        logs.logger.debug('Starting thread workers')
         for _ in range(self.threads_number):
-            threading.Thread(target=self.worker, daemon=True).start()
+            threading.Thread(target=self.worker_tasks, daemon=True).start()
+
+        logs.logger.debug('Filling ports')
+        # NOTE: Parse `services` and build a list of tuples with ports taken from respective classes.
+        for idx, service in enumerate(services):
+            srv = service.split(':')
+            if len(srv) == 1:
+                srv.append(str(services_module.Service.registry[srv[0]].port))
+            services[idx] = srv
+
+        logs.logger.info(f'Running!')
+        if combos:
+            for prod in itertools.product(services, targets, combos):
+                service, ports = prod[0]
+                service_options = options.get(service, None)
+                try:
+                    username, secret = prod[2]
+                except ValueError:
+                    raise exceptions.DataError('Invalid combo file!')
+                for port in ports.split(','):
+                    self.queue.put((service, port, prod[1], username, secret, service_options))
+        if usernames and secrets:
+            for prod in itertools.product(services, targets, usernames, secrets):
+                service, ports = prod[0]
+                service_options = options.get(service, None)
+                for port in ports.split(','):
+                    self.queue.put((service, port, prod[1], prod[2], prod[3], service_options))
         if self.enable_statistics:
-            threading.Thread(target=self.stats, daemon=True).start()
-        for task in tasks:
-            self.queue.put(task)
+            threading.Thread(target=self.worker_stats, daemon=True).start()
         self.queue.join()
