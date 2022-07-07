@@ -1,7 +1,4 @@
-from .base import Service
-from .ssh import Ssh
-from .http import (
-    HttpBasicAuth,
-    HttpsBasicAuth,
-)
-from .ftp import Ftp
+from passtry.services.base import *
+from passtry.services.ftp import *
+from passtry.services.http import *
+from passtry.services.ssh import *

@@ -9,15 +9,18 @@ from passtry import (
 )
 
 
+__all__ = ['HttpBasicAuth', 'HttpsBasicAuth']
+
+
 class HttpMixin:
 
     @classmethod
     def map_kwargs(cls, task):
         mapping = {
-            'netloc': task[3],
-            'user': task[1],
-            'pass': task[2],
-            'port': int(task[4]),
+            'netloc': task[2],
+            'user': task[3],
+            'pass': task[4],
+            'port': int(task[1]),
         }
         options = task[5]
         mapping['path'] = options.get('path', '') if options else ''
@@ -46,6 +49,15 @@ class HttpBasicAuth(HttpMixin, services.Service):
             return True
         else:
             return False
+
+    @classmethod
+    def prettify(cls, task):
+        path = task['options'].get('path', None)
+        task['services'] = cls.scheme
+        result = '{services}://{usernames}:{secrets}@{targets}:{ports}'.format(**task)
+        if path:
+            result += path
+        return result
 
 
 class HttpsBasicAuth(HttpBasicAuth):

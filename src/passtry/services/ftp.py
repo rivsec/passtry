@@ -7,6 +7,9 @@ from passtry import (
 )
 
 
+__all__ = ['Ftp']
+
+
 class Ftp(services.Service):
 
     port = 21
@@ -15,10 +18,10 @@ class Ftp(services.Service):
     @classmethod
     def map_kwargs(cls, task):
         return {
-            'host': task[3],
-            'user': task[1],
-            'passwd': task[2],
-            'port': int(task[4]),
+            'host': task[2],
+            'user': task[3],
+            'passwd': task[4],
+            'port': int(task[1]),
         }
 
     @classmethod
@@ -28,7 +31,7 @@ class Ftp(services.Service):
         ftp = ftplib.FTP(timeout=timeout)
         try:
             ftp.connect(kwargs['host'], kwargs['port'])
-        except (TimeoutError, ConnectionRefusedError):
+        except (TimeoutError, ConnectionRefusedError, EOFError):
             logs.logger.debug(f'{cls.__name__} connection failed (timed out?) for {task}')
             raise exceptions.ConnectionFailed
         result = False
