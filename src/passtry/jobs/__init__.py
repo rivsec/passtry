@@ -215,7 +215,10 @@ class Job:
         for idx, service in enumerate(services):
             srv = service.split(':')
             if len(srv) == 1:
-                srv.append(str(services_module.Service.registry[srv[0]].port))
+                try:
+                    srv.append(str(services_module.Service.registry[srv[0]].port))
+                except KeyError:
+                    raise exceptions.ConfigurationError(f'Unknown service `{srv[0]}`!')
             services[idx] = srv
 
         logs.logger.info(f'Running!')

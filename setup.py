@@ -12,7 +12,7 @@ def from_file(*names, encoding='utf8'):
 
 setuptools.setup(
     name='passtry',
-    version='0.1.0',
+    version='1.1.1',
     description='TODO',
     long_description=from_file('README.md'),
     url='https://github.com/rivsec/passtry',

@@ -15,7 +15,7 @@ class ArgSplitAction(argparse.Action):
         setattr(namespace, self.dest, values.split(','))
 
 
-def parse_args(args):
+def get_parser():
     parser = argparse.ArgumentParser(
         prog='passtry',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -46,6 +46,10 @@ def parse_args(args):
     verbosity = parser.add_mutually_exclusive_group()
     verbosity.add_argument('-d', '--debug', action='store_const', dest='loglevel', const=logs.logging.DEBUG, default=logs.logging.INFO, help='Enable debug mode (verbose output)')
     verbosity.add_argument('-q', '--quiet', action='store_const', dest='loglevel', const=logs.logging.NOTSET, default=logs.logging.INFO, help='Enable quiet mode')
+    return parser
+
+
+def parse_args(parser, args):
     parsed = parser.parse_args(args)
     logs.init(parsed.loglevel)
     if parsed.list_services:
@@ -106,6 +110,9 @@ def parse_args(args):
     if not data_targets:
         raise exceptions.DataError('Missing `targets` data! (-t/-tf)')
 
+    if not data_usernames and not (data_secrets or data_combos):
+        raise exceptions.DataError('Nothing to do!')
+
     for opt in parsed.options:
         service, params = opt.split(':')
         attr, value = params.split('=')
@@ -116,11 +123,12 @@ def parse_args(args):
 
 
 def main():
-    results = None
+    parser = get_parser()
     try:
-        results = parse_args(sys.argv[1:])
+        results = parse_args(parser, sys.argv[1:])
     except (exceptions.ConfigurationError, exceptions.DataError) as exc:
         logs.logger.error(exc)
+        parser.error(exc)
     except KeyboardInterrupt:
         logs.logger.info(f'Exiting')
     else:
