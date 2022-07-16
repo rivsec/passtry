@@ -1,3 +1,5 @@
+import socket
+
 import paramiko
 
 from passtry import (
@@ -31,7 +33,7 @@ class Ssh(services.Service):
         try:
             transport = paramiko.Transport((kwargs['hostname'], kwargs['port']))
             transport.start_client(timeout=timeout)
-        except paramiko.ssh_exception.SSHException:
+        except (paramiko.ssh_exception.SSHException, socket.gaierror):
             logs.logger.debug(f'{cls.__name__} connection failed (timed out?) for {task}')
             raise exceptions.ConnectionFailed
         try:

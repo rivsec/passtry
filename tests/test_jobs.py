@@ -51,3 +51,14 @@ def test_first_match(ssh_service):
     assert job.attempts.get() == 2
     assert job.successful.get() == 2
     assert job.results.get() == [('ssh', str(ssh_port), ssh_host, 'user', 'P@55w0rd!', None)]
+
+
+def test_override_service_port(ssh_service):
+    ssh_host, ssh_port = ssh_service
+    job = jobs.Job(threads_number=1, first_match=True)
+    job.start(
+        ['ssh:2221,2222'], [f'{ssh_host}:22'], ['user', 'user2'], ['Password!', 'P@55w0rd!', 'Password']
+    )
+    assert job.attempts.get() == 2
+    assert job.successful.get() == 2
+    assert job.results.get() == [('ssh', str(ssh_port), ssh_host, 'user', 'P@55w0rd!', None)]

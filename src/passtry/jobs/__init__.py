@@ -197,6 +197,17 @@ class Job:
         logs.logger.debug('output()')
         return [self.prettify(result) for result in self.results.get() if result]
 
+    def put(self, service, ports, target, username, secret, service_options):
+        try:
+            host, port = target.split(':')
+        except ValueError:
+            host, port = target, None
+        if port:
+            self.queue.put((service, port, host, username, secret, service_options))
+        else:
+            for port in ports.split(','):
+                self.queue.put((service, port, host, username, secret, service_options))
+
     def start(self, services, targets, usernames=None, secrets=None, options=None, combos=None):
         """Main entry point.
 
@@ -230,14 +241,12 @@ class Job:
                     username, secret = prod[2]
                 except ValueError:
                     raise exceptions.DataError('Invalid combo file!')
-                for port in ports.split(','):
-                    self.queue.put((service, port, prod[1], username, secret, service_options))
+                self.put(service, ports, prod[1], username, secret, service_options)
         if usernames and secrets:
             for prod in itertools.product(services, targets, usernames, secrets):
                 service, ports = prod[0]
                 service_options = options.get(service, None)
-                for port in ports.split(','):
-                    self.queue.put((service, port, prod[1], prod[2], prod[3], service_options))
+                self.put(service, ports, prod[1], prod[2], prod[3], service_options)
         if self.enable_statistics:
             threading.Thread(target=self.worker_stats, daemon=True).start()
         self.queue.join()

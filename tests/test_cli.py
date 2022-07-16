@@ -21,7 +21,6 @@ def test_one_result(ssh_service):
     ssh_host, ssh_port = ssh_service
     args = shlex.split(f'-s ssh -U user -S P@55w0rd! -t {ssh_host}')
     parser = passtry.get_parser()
-    passtry.parse_args(parser, args)
     assert passtry.parse_args(parser, args) == [f'ssh://user:P@55w0rd!@{ssh_host}:{ssh_port}']
 
 

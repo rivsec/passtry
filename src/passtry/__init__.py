@@ -29,7 +29,7 @@ def get_parser():
     parser.add_argument('-Sf', '--secrets-file', type=argparse.FileType('r'), default=list(), help='Secrets file')
     parser.add_argument('-Cf', '--combo-file', type=argparse.FileType('r'), default=list(), help='Combo file')
     parser.add_argument('-Cd', '--combo-delimiter', default=':', help='Combo file delimiter')
-    parser.add_argument('-t', '--targets', action=ArgSplitAction, default=list(), help='Targets (`,` separated)')
+    parser.add_argument('-t', '--targets', action=ArgSplitAction, default=list(), help='Targets (`,` separated, e.g. `example.com` or `example.com:22`)')
     parser.add_argument('-tf', '--targets-file', type=argparse.FileType('r'), default=list(), help='Targets file')
     parser.add_argument('-o', '--options', action=ArgSplitAction, default=dict(), help='Options (`,` separated, e.g. `http-basic:path=/secret-path/`)')
     parser.add_argument('-tN', '--threads-number', type=int, default=jobs.THREADS_NUMBER, help='Number of worker threads')
