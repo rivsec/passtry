@@ -18,7 +18,7 @@ class ArgSplitAction(argparse.Action):
 def get_parser():
     parser = argparse.ArgumentParser(
         prog='passtry',
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.print_usage = parser.print_help
     parser.add_argument('-s', '--services', action=ArgSplitAction, default=list(), help='Services (`,` separated, e.g. `ssh` or `ssh:2222`)')

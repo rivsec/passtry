@@ -47,6 +47,23 @@ def test_one_result_set_port(ssh_service):
     assert passtry.parse_args(parser, args) == [f'ssh://user:P@55w0rd!@{ssh_host}:{ssh_port}']
 
 
+def test_service_split_extra(ssh_service):
+    ssh_host, ssh_port = ssh_service
+    args = shlex.split(f'-s ssh,ftp,, -U user -S P@55w0rd! -t {ssh_host}')
+    parser = passtry.get_parser()
+    with pytest.raises(exceptions.ConfigurationError) as exc:
+        passtry.parse_args(parser, args)
+    assert 'Unknown service' in str(exc.value)
+
+
+def test_secret_split_extra(ssh_service):
+    ssh_host, ssh_port = ssh_service
+    args = shlex.split(f'-s ssh -U user -S P@55w0rd!,Password,, -t {ssh_host}')
+    parser = passtry.get_parser()
+    passtry.parse_args(parser, args)
+    assert passtry.parse_args(parser, args) == [f'ssh://user:P@55w0rd!@{ssh_host}:{ssh_port}']
+
+
 def test_no_results(ssh_service):
     ssh_host, ssh_port = ssh_service
     args = shlex.split(f'-s ssh -U user -S Password -t {ssh_host}')
@@ -103,7 +120,7 @@ def test_first_match(ssh_service, data_dir):
 
 def test_use_all_args(ssh_service, data_dir):
     ssh_host, ssh_port = ssh_service
-    args = shlex.split(f'-s ssh -U user,user2 -eF -S "Password,P@55w0rd!" -t {ssh_host} -tN 3 -fN 4 -cT 5 -tW 1 -tR 1 -eF -dF -dR -eS -tS 10')
+    args = shlex.split(f'-s ssh -U user,user2 -eF -S "Password,P@55w0rd!" -t {ssh_host} -tN 8 -fN 4 -cT 5 -tW 1 -tR 1 -eF -dF -dR -eS -tS 10')
     parser = passtry.get_parser()
     assert len(passtry.parse_args(parser, args)) == 1
 
@@ -114,7 +131,7 @@ def test_mixing_services(ftp_service, http_service, https_service, ssh_service):
     https_host, https_port = https_service
     ssh_host, ssh_port = ssh_service
     assert ftp_host == http_host == https_host == ssh_host
-    args = shlex.split(f'-s ftp,http-basic,https-basic,ssh -U user,user2 -S "Password,P@55w0rd!" -dF -tN 1 -t {ftp_host} -o http-basic:path=/http-basic/,https-basic:path=/http-basic/')
+    args = shlex.split(f'-s ftp,http-basic,https-basic,ssh -U user,user2 -S "Password,P@55w0rd!" -dF -t {ftp_host} -o http-basic:path=/http-basic/,https-basic:path=/http-basic/')
     parser = passtry.get_parser()
     assert set(passtry.parse_args(parser, args)) == {
         f'ftp://user:P@55w0rd!@{ftp_host}:{ftp_port}',

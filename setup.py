@@ -12,7 +12,7 @@ def from_file(*names, encoding='utf8'):
 
 setuptools.setup(
     name='passtry',
-    version='1.1.1',
+    version='1.1.3',
     description='TODO',
     long_description=from_file('README.md'),
     url='https://github.com/rivsec/passtry',
@@ -24,7 +24,7 @@ setuptools.setup(
     },
     keywords=[
     ],
-    python_requires='>=3.10',
+    python_requires='>=3.9',
     install_requires=[
         'paramiko==2.11.0',
         'requests==2.28.0',

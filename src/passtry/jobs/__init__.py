@@ -22,7 +22,7 @@ TASK_STRUCT = {
     5: 'options',
 }
 THREADS_NUMBER = 10
-FAILED_NUMBER = 10
+FAILED_NUMBER = 5
 CONNECTIONS_TIMEOUT = 10
 TIME_WAIT = 0.1
 TIME_RANDOMIZE = 0
@@ -59,6 +59,25 @@ class Results:
             return self._items
 
 
+class Ignored:
+
+    def __init__(self):
+        self._items = dict()
+        self._lock = threading.Lock()
+
+    def inc(self, item):
+        with self._lock:
+            if item not in self._items:
+                self._items[item] = 0
+            self._items[item] += 1
+
+    def get(self, item):
+        with self._lock:
+            if item not in self._items:
+                self._items[item] = 0
+            return self._items[item]
+
+
 class Job:
 
     def __init__(
@@ -72,7 +91,8 @@ class Job:
             watch_failures=True,
             retry_failed=True,
             enable_statistics=False,
-            time_statistics=TIME_STATISTICS
+            time_statistics=TIME_STATISTICS,
+            randomize=True
         ):
         self.threads_number = threads_number
         self.failed_number = failed_number
@@ -84,11 +104,13 @@ class Job:
         self.retry_failed = retry_failed
         self.enable_statistics = enable_statistics
         self.time_statistics = time_statistics
+        self.randomize = randomize
         self.attempts = Counter()
         self.successful = Counter()
         self.failed = Counter()
         self.results = Results()
-        self.queue = queue.Queue()
+        self.ignored = Ignored()
+        self.tasks = queue.Queue()
         # NOTE: Disable `Unverified HTTPS request is being made` warning.
         # FIXME: Any better place to put this to guarantee execution?
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -113,7 +135,11 @@ class Job:
         if file_obj is not None:
             try:
                 for line in file_obj:
-                    result.append(tuple(line.strip().split(delimiter)))
+                    cred = line.strip().split(delimiter)
+                    if len(cred) < 2:
+                        raise exceptions.DataError(f'Invalid combo file! Line: {line}')
+                    else:
+                        result.append(tuple(cred))
             except ValueError:
                 raise exceptions.DataError('Error occured while processing combo file')
         return result
@@ -126,14 +152,14 @@ class Job:
         prettify_method = services_module.Service.registry[task_dict['services']].prettify
         return prettify_method(task_dict)
 
-    def tasks_clear(self, queue):
+    def tasks_clear(self, tasks):
         """Removes all items from the Queue to stop workers gracefully.
 
         """
-        with queue.mutex:
-            queue.queue.clear()
-            queue.unfinished_tasks = 0
-            queue.all_tasks_done.notify_all()
+        with tasks.mutex:
+            tasks.queue.clear()
+            tasks.unfinished_tasks = 0
+            tasks.all_tasks_done.notify_all()
 
     def worker_stats(self):
         while True:
@@ -145,14 +171,20 @@ class Job:
                 f'Matched credentials: {len(self.results.get())}'
             )
 
-    def worker_tasks(self):
-        """A generic thread worker function.
-
-        """
+    def worker_tasks(self, tasks):
         while True:
-            task = self.queue.get()
+            task = tasks.get()
             if task is None:
                 break
+            host_port = (task[2], task[1])
+            if self.watch_failures:
+                if self.ignored.get(host_port) >= self.failed_number:
+                    # FIXME: Needs a better approach (erasing other occurrences) that doesn't
+                    #        involve messing with dequeue(). Current solution has a race
+                    #        condition, hence the `>=`.
+                    logs.logger.debug(f'Too many failed connections for `{host_port}`, ignoring task `{task}`!')
+                    tasks.task_done()
+                    continue
             try:
                 cls = services_module.Service.registry[task[0]]
             except KeyError:
@@ -164,13 +196,12 @@ class Job:
                 logs.logger.debug(f'Connection failed for {task}')
                 self.failed.inc()
                 if self.watch_failures:
-                    if self.failed.get() == self.failed_number:
-                        logs.logger.info(f'Too many failed connections, aborting!')
-                        self.tasks_clear(self.queue)
-                        continue
+                    # NOTE: Increase counter for failed connection for given host:port combination.
+                    logs.logger.debug(f'Ignore value for {host_port} is {self.ignored.get(host_port)}, increasing')
+                    self.ignored.inc(host_port)
                 if self.retry_failed:
-                    logs.logger.debug(f'Putting {task} back to the queue')
-                    self.queue.put(task)
+                    logs.logger.debug(f'Putting {task} back to the tasks')
+                    tasks.put(task)
             else:
                 self.successful.inc()
                 logs.logger.debug(f'Connection successful for {task}')
@@ -181,14 +212,14 @@ class Job:
                     # NOTE: Finish work if abort on first match is enabled.
                     if self.first_match:
                         logs.logger.info(f'Found a first match, done!')
-                        self.tasks_clear(self.queue)
+                        self.tasks_clear(tasks)
             wait_time = self.time_wait
             if self.time_randomize:
                 wait_time += round(random.uniform(0, self.time_randomize), 1)
             time.sleep(wait_time)
             # NOTE: This "magic" is due to queue possibly being emptied in another thread.
-            if self.queue.unfinished_tasks:
-                self.queue.task_done()
+            if tasks.unfinished_tasks:
+                tasks.task_done()
 
     def output(self):
         """Returns list of URIs with confirmed credentials.
@@ -197,16 +228,21 @@ class Job:
         logs.logger.debug('output()')
         return [self.prettify(result) for result in self.results.get() if result]
 
-    def put(self, service, ports, target, username, secret, service_options):
+    def put(self, tasks, service, ports, target, username, secret, service_options):
         try:
             host, port = target.split(':')
         except ValueError:
             host, port = target, None
         if port:
-            self.queue.put((service, port, host, username, secret, service_options))
+            tasks.put((service, int(port), host, username, secret, service_options))
         else:
             for port in ports.split(','):
-                self.queue.put((service, port, host, username, secret, service_options))
+                try:
+                    port = int(port)
+                except ValueError:
+                    pass
+                else:
+                    tasks.put((service, port, host, username, secret, service_options))
 
     def start(self, services, targets, usernames=None, secrets=None, options=None, combos=None):
         """Main entry point.
@@ -214,12 +250,10 @@ class Job:
         """
         if options is None:
             options = dict()
+        if combos is None:
+            combos = list()
 
         services = list(services)
-
-        logs.logger.debug('Starting thread workers')
-        for _ in range(self.threads_number):
-            threading.Thread(target=self.worker_tasks, daemon=True).start()
 
         logs.logger.debug('Filling ports')
         # NOTE: Parse `services` and build a list of tuples with ports taken from respective classes.
@@ -232,21 +266,23 @@ class Job:
                     raise exceptions.ConfigurationError(f'Unknown service `{srv[0]}`!')
             services[idx] = srv
 
-        logs.logger.info(f'Running!')
-        if combos:
-            for prod in itertools.product(services, targets, combos):
-                service, ports = prod[0]
-                service_options = options.get(service, None)
-                try:
-                    username, secret = prod[2]
-                except ValueError:
-                    raise exceptions.DataError('Invalid combo file!')
-                self.put(service, ports, prod[1], username, secret, service_options)
-        if usernames and secrets:
-            for prod in itertools.product(services, targets, usernames, secrets):
-                service, ports = prod[0]
-                service_options = options.get(service, None)
-                self.put(service, ports, prod[1], prod[2], prod[3], service_options)
+        logs.logger.debug('Starting thread workers')
+        for _ in range(self.threads_number):
+            threading.Thread(target=self.worker_tasks, args=(self.tasks,), daemon=True).start()
+
+        logs.logger.info(f'Filling up the tasks')
+        creds = list(itertools.product(usernames, secrets))
+        creds.extend(combos)
+        for prod in itertools.product(services, targets, creds):
+            service, ports = prod[0]
+            service_options = options.get(service, None)
+            username, secret = prod[2]
+            self.put(self.tasks, service, ports, prod[1], username, secret, service_options)
+
+        logs.logger.info('Randomizing job order')
+        if self.randomize:
+            random.shuffle(self.tasks.queue)
+
         if self.enable_statistics:
             threading.Thread(target=self.worker_stats, daemon=True).start()
-        self.queue.join()
+        self.tasks.join()
