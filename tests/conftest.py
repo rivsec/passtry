@@ -1,6 +1,8 @@
 import pathlib
 import os
+import shutil
 import socket
+import tempfile
 
 import pytest
 
@@ -47,3 +49,10 @@ def https_service(docker_ip, docker_services):
 def data_dir():
     cwd = pathlib.Path(os.getenv('PYTEST_CURRENT_TEST').split('::')[0]).parent
     return cwd / 'data'
+
+
+@pytest.fixture(scope='function')
+def tmp_dir():
+    tmp_dir = tempfile.mkdtemp()
+    yield tmp_dir
+    shutil.rmtree(tmp_dir)

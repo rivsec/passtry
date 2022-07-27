@@ -32,7 +32,6 @@ class Ftp(services.Service):
         try:
             ftp.connect(kwargs['host'], kwargs['port'])
         except (TimeoutError, ConnectionRefusedError, EOFError):
-            logs.logger.debug(f'{cls.__name__} connection failed (timed out?) for {task}')
             raise exceptions.ConnectionFailed
         result = False
         try:
@@ -41,7 +40,6 @@ class Ftp(services.Service):
             result = False
         # NOTE: Repeating handling `TimeoutError` exception on purpose.
         except (TimeoutError, EOFError):
-            logs.logger.debug(f'{cls.__name__} connection failed (timed out?) for {task}')
             raise exceptions.ConnectionFailed
         else:
             result = True

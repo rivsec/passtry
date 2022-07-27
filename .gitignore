@@ -1,3 +1,6 @@
 .venv
 __pycache__
 src/passtry.egg-info
+.tox
+.coverage
+.coverage.py*

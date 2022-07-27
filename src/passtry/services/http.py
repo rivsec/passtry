@@ -43,7 +43,6 @@ class HttpBasicAuth(HttpMixin, services.Service):
         try:
             response = requests.get(url, auth=requests.auth.HTTPBasicAuth(kwargs['user'], kwargs['pass']), verify=False, allow_redirects=False, timeout=timeout)
         except requests.exceptions.Timeout:
-            logs.logger.debug(f'{cls.__name__} connection failed (timed out?) for {task}')
             raise exceptions.ConnectionFailed
         if response.status_code == 200:
             return True

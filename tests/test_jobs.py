@@ -93,11 +93,11 @@ def test_fail_per_host_port(ssh_service):
     job.start(
         ['ssh:22,2221,2222,2223,2224'], [ssh_host], ['user'], ['Password!', 'P@55w0rd!', 'Password']
     )
-    # NOTE: This is "trying the best" approach to minimze number of repetitions
+    # NOTE: This is "doing the best" approach to minimize number of repetitions
     #       for failed hosts, hence the specific number can't be predicted.
-    #       Probably needs better approach, see line `if self.ignored.get(host_port) >= self.failed_number`
-    assert job.ignored.get((ssh_host, 2221)) >= 1
-    assert job.ignored.get((ssh_host, 2222)) >= 1
-    assert job.ignored.get((ssh_host, 2223)) >= 1
-    assert job.ignored.get((ssh_host, 2224)) >= 1
+    #       Needs better solution, see line `if self.ignored.get(host_port) >= self.failed_number`
+    assert job.ignored.get(('ssh', 2221, ssh_host)) >= 1
+    assert job.ignored.get(('ssh', 2222, ssh_host)) >= 1
+    assert job.ignored.get(('ssh', 2223, ssh_host)) >= 1
+    assert job.ignored.get(('ssh', 2224, ssh_host)) >= 1
     assert job.results.get() == [('ssh', ssh_port, ssh_host, 'user', 'P@55w0rd!', None)]

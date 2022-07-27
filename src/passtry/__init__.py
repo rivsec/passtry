@@ -43,6 +43,7 @@ def get_parser():
     parser.add_argument('-dR', '--disable-retry', default=True, action='store_false', help='Disable retry for failed connections')
     parser.add_argument('-eS', '--enable-statistics', default=False, action='store_true', help='Show statistics (attempts, successful/failed connections, matches)')
     parser.add_argument('-tS', '--time-statistics', type=int, default=jobs.TIME_STATISTICS, help='Statistics interval')
+    parser.add_argument('-Of', '--output-file', default=None, help='Save results to a file')
     verbosity = parser.add_mutually_exclusive_group()
     verbosity.add_argument('-d', '--debug', action='store_const', dest='loglevel', const=logs.logging.DEBUG, default=logs.logging.INFO, help='Enable debug mode (verbose output)')
     verbosity.add_argument('-q', '--quiet', action='store_const', dest='loglevel', const=logs.logging.NOTSET, default=logs.logging.INFO, help='Enable quiet mode')
@@ -67,7 +68,8 @@ def parse_args(parser, args):
         watch_failures=parsed.disable_failures,
         retry_failed=parsed.disable_retry,
         enable_statistics=parsed.enable_statistics,
-        time_statistics=parsed.time_statistics
+        time_statistics=parsed.time_statistics,
+        output_file=parsed.output_file
     )
 
     data_services = list()
@@ -114,7 +116,10 @@ def parse_args(parser, args):
         raise exceptions.DataError('Nothing to do!')
 
     for opt in parsed.options:
-        service, params = opt.split(':')
+        try:
+            service, params = opt.split(':')
+        except ValueError:
+            raise exceptions.ConfigurationError(f'Invalid `options` argument: `{opt}`')
         attr, value = params.split('=')
         data_options[service] = {attr: value}
 

@@ -21,8 +21,8 @@ TASK_STRUCT = {
     4: 'secrets',
     5: 'options',
 }
-THREADS_NUMBER = 10
-FAILED_NUMBER = 5
+THREADS_NUMBER = 20
+FAILED_NUMBER = 3
 CONNECTIONS_TIMEOUT = 10
 TIME_WAIT = 0.1
 TIME_RANDOMIZE = 0
@@ -92,7 +92,8 @@ class Job:
             retry_failed=True,
             enable_statistics=False,
             time_statistics=TIME_STATISTICS,
-            randomize=True
+            randomize=True,
+            output_file=None
         ):
         self.threads_number = threads_number
         self.failed_number = failed_number
@@ -105,6 +106,7 @@ class Job:
         self.enable_statistics = enable_statistics
         self.time_statistics = time_statistics
         self.randomize = randomize
+        self.output_file = output_file
         self.attempts = Counter()
         self.successful = Counter()
         self.failed = Counter()
@@ -172,17 +174,18 @@ class Job:
             )
 
     def worker_tasks(self, tasks):
+        thread = threading.current_thread()
         while True:
             task = tasks.get()
             if task is None:
                 break
-            host_port = (task[2], task[1])
+            unique_key = (task[0], task[1], task[2])
             if self.watch_failures:
-                if self.ignored.get(host_port) >= self.failed_number:
+                if self.ignored.get(unique_key) >= self.failed_number:
                     # FIXME: Needs a better approach (erasing other occurrences) that doesn't
                     #        involve messing with dequeue(). Current solution has a race
                     #        condition, hence the `>=`.
-                    logs.logger.debug(f'Too many failed connections for `{host_port}`, ignoring task `{task}`!')
+                    logs.logger.debug(f'/ {thread.name} / Ignoring: {task}')
                     tasks.task_done()
                     continue
             try:
@@ -193,24 +196,31 @@ class Job:
             try:
                 result = cls.execute(task, self.connections_timeout)
             except exceptions.ConnectionFailed:
-                logs.logger.debug(f'Connection failed for {task}')
+                logs.logger.debug(f'/ {thread.name} / Connection failed: {task}')
                 self.failed.inc()
                 if self.watch_failures:
-                    # NOTE: Increase counter for failed connection for given host:port combination.
-                    logs.logger.debug(f'Ignore value for {host_port} is {self.ignored.get(host_port)}, increasing')
-                    self.ignored.inc(host_port)
+                    # NOTE: Increase counter for failed connection for given service:port:host combination.
+                    logs.logger.debug(f'/ {thread.name} / Increasing ignored count: {unique_key}')
+                    self.ignored.inc(unique_key)
                 if self.retry_failed:
-                    logs.logger.debug(f'Putting {task} back to the tasks')
+                    logs.logger.debug(f'/ {thread.name} / Putting back: {task}')
                     tasks.put(task)
             else:
                 self.successful.inc()
-                logs.logger.debug(f'Connection successful for {task}')
+                logs.logger.debug(f'/ {thread.name} / Connection successful: {task}')
                 if result:
-                    logs.logger.debug(f'Validated following credentials: {task}')
-                    print(self.prettify(task))
+                    logs.logger.debug(f'/ {thread.name} / Validated credentials: {task}')
+                    output = self.prettify(task)
+                    if self.output_file:
+                        # NOTE: Write order doesn't matter.
+                        with open(self.output_file, 'a+') as fil:
+                            fil.write(output + '\n')
+                    print(output)
                     self.results.add(task)
                     # NOTE: Finish work if abort on first match is enabled.
                     if self.first_match:
+                        # FIXME: Same issues as with ignored: a matching password can end up
+                        #        in two different threads. Edge case but still a case.
                         logs.logger.info(f'Found a first match, done!')
                         self.tasks_clear(tasks)
             wait_time = self.time_wait
@@ -225,7 +235,6 @@ class Job:
         """Returns list of URIs with confirmed credentials.
 
         """
-        logs.logger.debug('output()')
         return [self.prettify(result) for result in self.results.get() if result]
 
     def put(self, tasks, service, ports, target, username, secret, service_options):
@@ -266,10 +275,6 @@ class Job:
                     raise exceptions.ConfigurationError(f'Unknown service `{srv[0]}`!')
             services[idx] = srv
 
-        logs.logger.debug('Starting thread workers')
-        for _ in range(self.threads_number):
-            threading.Thread(target=self.worker_tasks, args=(self.tasks,), daemon=True).start()
-
         logs.logger.info(f'Filling up the tasks')
         creds = list(itertools.product(usernames, secrets))
         creds.extend(combos)
@@ -283,6 +288,20 @@ class Job:
         if self.randomize:
             random.shuffle(self.tasks.queue)
 
+        logs.logger.debug('Starting thread workers')
+        threads = [
+            threading.Thread(
+                name='Worker-' + str(idx),
+                target=self.worker_tasks,
+                args=(self.tasks,),
+                daemon=True
+            ) for idx in range(self.threads_number)
+        ]
+
+        for thread in threads:
+            thread.start()
+
         if self.enable_statistics:
             threading.Thread(target=self.worker_stats, daemon=True).start()
+
         self.tasks.join()

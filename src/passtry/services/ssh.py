@@ -35,12 +35,11 @@ class Ssh(services.Service):
             transport = paramiko.Transport((kwargs['hostname'], kwargs['port']))
             transport.start_client(timeout=timeout)
         except (paramiko.ssh_exception.SSHException, socket.gaierror, EOFError):
-            logs.logger.debug(f'{cls.__name__} connection failed (timed out?) for {task}')
             raise exceptions.ConnectionFailed
         else:
             try:
                 transport.auth_password(kwargs['username'], kwargs['password'])
-            except (paramiko.ssh_exception.AuthenticationException):
+            except (paramiko.ssh_exception.AuthenticationException, paramiko.ssh_exception.SSHException):
                 pass
             else:
                 result = True
