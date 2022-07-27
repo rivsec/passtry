@@ -9,7 +9,7 @@ def test_ssh(ssh_service):
     job.start(
         [f'ssh:{service_port}'], [service_host], ['user'], ['P@55w0rd!', 'Password']
     )
-    assert job.output() == [f'ssh://user:P@55w0rd!@{service_host}:{service_port}']
+    assert job.output == [f'ssh://user:P@55w0rd!@{service_host}:{service_port}']
 
 
 def test_ftp(ftp_service):
@@ -18,7 +18,7 @@ def test_ftp(ftp_service):
     job.start(
         [f'ftp:{service_port}'], [service_host], ['user'], ['P@55w0rd!', 'Password']
     )
-    assert job.output() == [f'ftp://user:P@55w0rd!@{service_host}:{service_port}']
+    assert job.output == [f'ftp://user:P@55w0rd!@{service_host}:{service_port}']
 
 
 def test_http_basic(http_service):
@@ -27,7 +27,7 @@ def test_http_basic(http_service):
     job.start(
         [f'http-basic:{service_port}'], [service_host], ['user'], ['P@55w0rd!', 'Password'], {'http-basic': {'path': '/http-basic/'}}
     )
-    assert job.output() == [f'http://user:P@55w0rd!@{service_host}:{service_port}/http-basic/']
+    assert job.output == [f'http://user:P@55w0rd!@{service_host}:{service_port}/http-basic/']
 
 
 def test_https_basic(https_service):
@@ -36,4 +36,4 @@ def test_https_basic(https_service):
     job.start(
         [f'https-basic:{service_port}'], [service_host], ['user'], ['P@55w0rd!', 'Password'], {'https-basic': {'path': '/http-basic/'}}
     )
-    assert job.output() == [f'https://user:P@55w0rd!@{service_host}:{service_port}/http-basic/']
+    assert job.output == [f'https://user:P@55w0rd!@{service_host}:{service_port}/http-basic/']

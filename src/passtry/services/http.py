@@ -37,7 +37,6 @@ class HttpBasicAuth(HttpMixin, services.Service):
 
     @classmethod
     def execute(cls, task, timeout):
-        logs.logger.debug(f'{cls.__name__} is executing {task}')
         kwargs = cls.map_kwargs(task)
         url = parse.urlunsplit((cls.scheme, kwargs['netloc'], kwargs['path'], kwargs['query'], kwargs['fragment']))
         try:

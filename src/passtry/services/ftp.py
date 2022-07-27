@@ -1,4 +1,5 @@
 import ftplib
+import socket
 
 from passtry import (
     exceptions,
@@ -26,7 +27,6 @@ class Ftp(services.Service):
 
     @classmethod
     def execute(cls, task, timeout):
-        logs.logger.debug(f'{cls.__name__} is executing {task}')
         kwargs = cls.map_kwargs(task)
         ftp = ftplib.FTP(timeout=timeout)
         try:
@@ -39,7 +39,7 @@ class Ftp(services.Service):
         except ftplib.error_perm:
             result = False
         # NOTE: Repeating handling `TimeoutError` exception on purpose.
-        except (TimeoutError, EOFError):
+        except (TimeoutError, EOFError, socket.timeout):
             raise exceptions.ConnectionFailed
         else:
             result = True

@@ -57,7 +57,7 @@ def parse_args(parser, args):
         print('Services: ' + ', '.join(sorted(services.Service.registry.keys())))
         sys.exit(0)
 
-    logs.logger.info('Preparing...')
+    logs.logger.info('Preparing')
     job = jobs.Job(
         threads_number=parsed.threads_number,
         failed_number=parsed.failed_number,
@@ -124,7 +124,7 @@ def parse_args(parser, args):
         data_options[service] = {attr: value}
 
     job.start(data_services, data_targets, data_usernames, data_secrets, data_options, data_combos)
-    return job.output()
+    return job.output
 
 
 def main():

@@ -1,6 +1,5 @@
 from urllib import parse
 import itertools
-import queue
 import random
 import threading
 import time
@@ -23,7 +22,7 @@ TASK_STRUCT = {
 }
 THREADS_NUMBER = 20
 FAILED_NUMBER = 3
-CONNECTIONS_TIMEOUT = 10
+CONNECTIONS_TIMEOUT = 2
 TIME_WAIT = 0.1
 TIME_RANDOMIZE = 0
 TIME_STATISTICS = 5
@@ -53,6 +52,10 @@ class Results:
     def add(self, item):
         with self._lock:
             self._items.append(item)
+
+    def set(self, items):
+        with self._lock:
+            self._items = items
 
     def get(self):
         with self._lock:
@@ -112,7 +115,10 @@ class Job:
         self.failed = Counter()
         self.results = Results()
         self.ignored = Ignored()
-        self.tasks = queue.Queue()
+        self.tasks = list()
+        self.total = None
+        self.running = False
+        self._output = None
         # NOTE: Disable `Unverified HTTPS request is being made` warning.
         # FIXME: Any better place to put this to guarantee execution?
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -154,45 +160,42 @@ class Job:
         prettify_method = services_module.Service.registry[task_dict['services']].prettify
         return prettify_method(task_dict)
 
-    def tasks_clear(self, tasks):
-        """Removes all items from the Queue to stop workers gracefully.
-
-        """
-        with tasks.mutex:
-            tasks.queue.clear()
-            tasks.unfinished_tasks = 0
-            tasks.all_tasks_done.notify_all()
-
     def worker_stats(self):
-        while True:
-            time.sleep(self.time_statistics)
+        while self.running:
+            percentage = int(abs(len(self.tasks) / self.total * 100 - 100))
             logs.logger.info(
                 f'Attempts: {self.attempts.get()} | '
-                f'Successful connections: {self.successful.get()} | '
-                f'Failed connections: {self.failed.get()} | '
-                f'Matched credentials: {len(self.results.get())}'
+                f'Successful: {self.successful.get()} | '
+                f'Failed: {self.failed.get()} | '
+                f'Credentials: {len(self.results.get())} | '
+                f'Pending: {len(self.tasks)} / {self.total} [{percentage}%]'
             )
+            time.sleep(self.time_statistics)
 
-    def worker_tasks(self, tasks):
+    def worker_tasks(self):
         thread = threading.current_thread()
-        while True:
-            task = tasks.get()
-            if task is None:
+        while self.running:
+            try:
+                if self.randomize:
+                    task = self.tasks.pop(random.randrange(len(self.tasks)))
+                else:
+                    task = self.tasks.pop()
+            except (ValueError, IndexError):
+                self.running = False
                 break
             unique_key = (task[0], task[1], task[2])
             if self.watch_failures:
                 if self.ignored.get(unique_key) >= self.failed_number:
-                    # FIXME: Needs a better approach (erasing other occurrences) that doesn't
-                    #        involve messing with dequeue(). Current solution has a race
-                    #        condition, hence the `>=`.
+                    # FIXME: Needs a better approach (erasing other occurrences). Current
+                    #        solution has a race condition, hence the `>=`.
                     logs.logger.debug(f'/ {thread.name} / Ignoring: {task}')
-                    tasks.task_done()
                     continue
             try:
                 cls = services_module.Service.registry[task[0]]
             except KeyError:
                 raise exceptions.ConfigurationError(f'Unknown service `{task[0]}`')
             self.attempts.inc()
+            logs.logger.debug(f'/ {thread.name} / Executing: {task}')
             try:
                 result = cls.execute(task, self.connections_timeout)
             except exceptions.ConnectionFailed:
@@ -204,46 +207,43 @@ class Job:
                     self.ignored.inc(unique_key)
                 if self.retry_failed:
                     logs.logger.debug(f'/ {thread.name} / Putting back: {task}')
-                    tasks.put(task)
+                    self.tasks.append(task)
             else:
                 self.successful.inc()
                 logs.logger.debug(f'/ {thread.name} / Connection successful: {task}')
                 if result:
-                    logs.logger.debug(f'/ {thread.name} / Validated credentials: {task}')
-                    output = self.prettify(task)
-                    if self.output_file:
-                        # NOTE: Write order doesn't matter.
-                        with open(self.output_file, 'a+') as fil:
-                            fil.write(output + '\n')
-                    print(output)
+                    logs.logger.debug(f'/ {thread.name} / [VALIDATED] credentials: {task}')
+                    print(self.prettify(task))
                     self.results.add(task)
                     # NOTE: Finish work if abort on first match is enabled.
                     if self.first_match:
                         # FIXME: Same issues as with ignored: a matching password can end up
-                        #        in two different threads. Edge case but still a case.
-                        logs.logger.info(f'Found a first match, done!')
-                        self.tasks_clear(tasks)
+                        #        in two different threads if small number of tasks. Edge case
+                        #        but still a case.
+                        self.tasks.clear()
+                        self.running = False
+                        break
             wait_time = self.time_wait
             if self.time_randomize:
                 wait_time += round(random.uniform(0, self.time_randomize), 1)
             time.sleep(wait_time)
-            # NOTE: This "magic" is due to queue possibly being emptied in another thread.
-            if tasks.unfinished_tasks:
-                tasks.task_done()
 
+    @property
     def output(self):
         """Returns list of URIs with confirmed credentials.
 
         """
-        return [self.prettify(result) for result in self.results.get() if result]
+        if self._output is None:
+            self._output = [self.prettify(result) for result in self.results.get() if result]
+        return self._output
 
-    def put(self, tasks, service, ports, target, username, secret, service_options):
+    def put(self, service, ports, target, username, secret, service_options):
         try:
             host, port = target.split(':')
         except ValueError:
             host, port = target, None
         if port:
-            tasks.put((service, int(port), host, username, secret, service_options))
+            self.tasks.append((service, int(port), host, username, secret, service_options))
         else:
             for port in ports.split(','):
                 try:
@@ -251,7 +251,7 @@ class Job:
                 except ValueError:
                     pass
                 else:
-                    tasks.put((service, port, host, username, secret, service_options))
+                    self.tasks.append((service, port, host, username, secret, service_options))
 
     def start(self, services, targets, usernames=None, secrets=None, options=None, combos=None):
         """Main entry point.
@@ -275,33 +275,48 @@ class Job:
                     raise exceptions.ConfigurationError(f'Unknown service `{srv[0]}`!')
             services[idx] = srv
 
-        logs.logger.info(f'Filling up the tasks')
+        logs.logger.info('Adding tasks...')
         creds = list(itertools.product(usernames, secrets))
         creds.extend(combos)
         for prod in itertools.product(services, targets, creds):
             service, ports = prod[0]
             service_options = options.get(service, None)
             username, secret = prod[2]
-            self.put(self.tasks, service, ports, prod[1], username, secret, service_options)
+            self.put(service, ports, prod[1], username, secret, service_options)
 
-        logs.logger.info('Randomizing job order')
-        if self.randomize:
-            random.shuffle(self.tasks.queue)
-
-        logs.logger.debug('Starting thread workers')
+        self.total = len(self.tasks)
+        logs.logger.info(f'Added {self.total} tasks')
         threads = [
             threading.Thread(
                 name='Worker-' + str(idx),
                 target=self.worker_tasks,
-                args=(self.tasks,),
                 daemon=True
             ) for idx in range(self.threads_number)
         ]
 
+        self.running = True
+
+        logs.logger.info('Running')
         for thread in threads:
             thread.start()
 
         if self.enable_statistics:
-            threading.Thread(target=self.worker_stats, daemon=True).start()
+            stats = threading.Thread(target=self.worker_stats, daemon=True)
+            stats.start()
+            threads.append(stats)
 
-        self.tasks.join()
+        for thread in threads:
+            thread.join()
+
+        if self.first_match:
+            if len(self.results.get()):
+                self.results.set([self.results.get()[0]])
+
+        failed = self.failed.get()
+        if failed:
+            logs.logger.info(f'Connection failed {failed} times')
+        if self.output:
+            if self.output_file:
+                # NOTE: Write order doesn't matter.
+                with open(self.output_file, 'a+') as fil:
+                    fil.writelines(self.output)

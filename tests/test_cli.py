@@ -17,6 +17,15 @@ def test_list_services(capsys):
     assert out == 'Services: ftp, http-basic, https-basic, ssh\n'
 
 
+def test_print_output(ssh_service, capsys):
+    ssh_host, ssh_port = ssh_service
+    args = shlex.split(f'-s ssh -U user -S P@55w0rd! -t {ssh_host}')
+    parser = passtry.get_parser()
+    passtry.parse_args(parser, args)
+    out, err = capsys.readouterr()
+    assert out == 'ssh://user:P@55w0rd!@127.0.0.1:22\n'
+
+
 def test_one_result(ssh_service):
     ssh_host, ssh_port = ssh_service
     args = shlex.split(f'-s ssh -U user -S P@55w0rd! -t {ssh_host}')

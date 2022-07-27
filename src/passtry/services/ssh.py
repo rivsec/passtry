@@ -28,7 +28,6 @@ class Ssh(services.Service):
 
     @classmethod
     def execute(cls, task, timeout):
-        logs.logger.debug(f'{cls.__name__} is executing {task}')
         kwargs = cls.map_kwargs(task)
         result = False
         try:
